@@ -42,11 +42,12 @@ def deletion_score_function(token):
     return -1.0
 
 def EditDistance(
-        ref,
-        hyp,
-        similarity_score_function = similarity_score_function,
-        insertion_score_function = insertion_score_function,
-        deletion_score_function = deletion_score_function):
+    ref,
+    hyp,
+    similarity_score_function = similarity_score_function,
+    insertion_score_function = insertion_score_function,
+    deletion_score_function = deletion_score_function,
+):
     assert(len(ref) != 0)
     class DPState:
         def __init__(self):
@@ -149,28 +150,27 @@ def EditDistance(
     return (best_path, best_score)
 
 
-def TokenWidth(token: str):
-    def CharWidth(c):
-        return 2 if (c >= '\u4e00') and (c <= '\u9fa5') else 1
-    return sum([ CharWidth(c) for c in token ])
-
-
 def PrettyPrintAlignment(alignment, stream = sys.stderr):
-    def display_token(token):
+    def token_repr(token):
         return token if token else '*'
 
-    def display_edit(edit):
+    def edit_repr(edit):
         return '' if edit == 'C' else edit
+
+    def display_width(token: str):
+        def char_width(c):
+            return 2 if (c >= '\u4e00') and (c <= '\u9fa5') else 1
+        return sum([ char_width(c) for c in token ])
 
     H = '  HYP  : '
     R = '  REF  : '
     E = '  EDIT : '
     for arc in alignment:
-        h = display_token(arc.hyp)
-        r = display_token(arc.ref)
-        e = display_edit(arc.edit)
+        h = token_repr(arc.hyp)
+        r = token_repr(arc.ref)
+        e = edit_repr(arc.edit)
 
-        nr, nh, ne = TokenWidth(r), TokenWidth(h), TokenWidth(e)
+        nr, nh, ne = display_width(r), display_width(h), display_width(e)
         n = max(nr, nh, ne) + 1
 
         H += h + ' ' * (n-nh)
@@ -327,7 +327,7 @@ if __name__ == '__main__':
     stats.num_refs = len(refs)
     stats.num_utts = len(utts)
 
-    logging.info('Evaluating Error Rate ...')
+    logging.info('Evaluating ...')
     ndone = 0
     with open(args.result, 'w+', encoding='utf8') as fo:
         for utt in utts:
