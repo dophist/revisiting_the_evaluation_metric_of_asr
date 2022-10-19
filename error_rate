@@ -210,12 +210,12 @@ def ComputeSentenceErrorRate(num_err_utts, num_utts):
 
 class ErrorStats:
     def __init__(self):
-        self.num_refs = 0
-        self.num_hyps = 0
-        self.num_hyp_without_ref = 0
-        self.num_hyp_with_empty_ref = 0
+        self.refs = 0
+        self.hyps = 0
+        self.hyp_without_ref = 0
+        self.hyp_with_empty_ref = 0
 
-        self.num_utts = 0 # seen in both ref & hyp
+        self.utts = 0 # seen in both ref & hyp
 
         self.C = 0
         self.S = 0
@@ -225,7 +225,7 @@ class ErrorStats:
         self.token_error_rate = 0.0
         self.modified_token_error_rate = 0.0
 
-        self.num_utts_with_error = 0
+        self.utts_with_error = 0
         self.sentence_error_rate = 0.0
 
     def to_json(self):
@@ -234,28 +234,27 @@ class ErrorStats:
     def to_kaldi(self):
         return (
             F'%WER {self.token_error_rate:.2f} [ {self.S + self.D + self.I} / {self.C + self.S + self.D}, {self.I} ins, {self.D} del, {self.S} sub ]\n'
-            F'%SER {self.sentence_error_rate:.2f} [ {self.num_utts_with_error} / {self.num_utts} ]\n'
+            F'%SER {self.sentence_error_rate:.2f} [ {self.utts_with_error} / {self.utts} ]\n'
         )
 
     def to_summary(self):
         #return json.dumps(self.__dict__, indent=4)
         summary = (
             '==================== Overall Error Statistics ====================\n'
-            F'num_refs: {self.num_refs}\n'
-            F'num_hyps: {self.num_hyps}\n'
-            F'num_hyp_without_ref: {self.num_hyp_without_ref}\n'
-            F'num_hyp_with_empty_ref: {self.num_hyp_with_empty_ref}\n'
-            F'num_utts: {self.num_utts}\n'
-            F'token_error_rate: {self.token_error_rate:.2f}%\n'
-            F'modified_token_error_rate: {self.modified_token_error_rate:.2f}%\n'
-            F'sentence_error_rate: {self.sentence_error_rate:.2f}%\n'
-            F'token_stats:\n'
-            F'  - tokens:{self.C + self.S + self.D:>7}\n'
-            F'  - edits: {self.S + self.I + self.D:>7}\n'
-            F'  - cor:   {self.C:>7}\n'
-            F'  - sub:   {self.S:>7}\n'
-            F'  - ins:   {self.I:>7}\n'
-            F'  - del:   {self.D:>7}\n'
+            F'refs: {self.refs}\n'
+            F'hyps: {self.hyps}\n'
+            F'hyp_without_ref: {self.hyp_without_ref}\n'
+            F'hyp_with_empty_ref: {self.hyp_with_empty_ref}\n'
+            F'utts: {self.utts}\n'
+            F'tokens: {self.C + self.S + self.D:>7}\n'
+            F'edits:  {self.S + self.I + self.D:>7}\n'
+            F'- COR:  {self.C:>7}\n'
+            F'- SUB:  {self.S:>7}\n'
+            F'- INS:  {self.I:>7}\n'
+            F'- DEL:  {self.D:>7}\n'
+            F'TER:  {self.token_error_rate:>6.2f}%\n'
+            F'mTER: {self.modified_token_error_rate:>6.2f}%\n'
+            F'SER:  {self.sentence_error_rate:>6.2f}%\n'
             '============================================================\n'
         )
         return summary
@@ -310,7 +309,7 @@ if __name__ == '__main__':
     stats = ErrorStats()
 
     # check valid utterances in hyp that have matched non-empty reference
-    stats.num_hyp_without_ref = 0
+    stats.hyp_without_ref = 0
     utts = []
     for utt in sorted(hyps.keys()):
         if utt in refs: # TODO: efficiency
@@ -318,14 +317,14 @@ if __name__ == '__main__':
                 utts.append(utt)
             else:
                 logging.warning(F'Found {utt} with empty reference, skipping...')
-                stats.num_hyp_with_empty_ref += 1
+                stats.hyp_with_empty_ref += 1
         else:
             logging.warning(F'Found {utt} without reference, skipping...')
-            stats.num_hyp_without_ref += 1
+            stats.hyp_without_ref += 1
 
-    stats.num_hyps = len(hyps)
-    stats.num_refs = len(refs)
-    stats.num_utts = len(utts)
+    stats.hyps = len(hyps)
+    stats.refs = len(refs)
+    stats.utts = len(utts)
 
     logging.info('Evaluating ...')
     ndone = 0
@@ -339,7 +338,7 @@ if __name__ == '__main__':
             ter, mter = ComputeTokenErrorRate(c, s, i, d)
 
             if ter > 0:
-                stats.num_utts_with_error += 1
+                stats.utts_with_error += 1
 
             # utt-level evaluation result
             print(F'{{"utt":{utt}, "score":{score}, "TER":{ter:.2f}, "mTER":{mter:.2f}, "cor":{c}, "sub":{s}, "ins":{i}, "del":{d}}}', file=fo)
@@ -357,11 +356,11 @@ if __name__ == '__main__':
 
         # corpus level evaluation result
         stats.token_error_rate, stats.modified_token_error_rate = ComputeTokenErrorRate(stats.C, stats.S, stats.I, stats.D)
-        stats.sentence_error_rate = ComputeSentenceErrorRate(stats.num_utts_with_error, stats.num_utts)
+        stats.sentence_error_rate = ComputeSentenceErrorRate(stats.utts_with_error, stats.utts)
 
         print(stats.to_summary(), file=fo)
 
-    #print(stats.to_json())
-    #print(stats.to_kaldi())
+    print(stats.to_json())
+    print(stats.to_kaldi())
     print(stats.to_summary())
 
