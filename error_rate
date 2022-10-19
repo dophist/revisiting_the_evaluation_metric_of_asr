@@ -252,9 +252,9 @@ class ErrorStats:
             F'- SUB:  {self.S:>7}\n'
             F'- INS:  {self.I:>7}\n'
             F'- DEL:  {self.D:>7}\n'
-            F'TER:  {self.token_error_rate:>6.2f}%\n'
-            F'mTER: {self.modified_token_error_rate:>6.2f}%\n'
-            F'SER:  {self.sentence_error_rate:>6.2f}%\n'
+            F'TER:  {self.token_error_rate:.2f}%\n'
+            F'mTER: {self.modified_token_error_rate:.2f}%\n'
+            F'SER:  {self.sentence_error_rate:.2f}%\n'
             '============================================================\n'
         )
         return summary
