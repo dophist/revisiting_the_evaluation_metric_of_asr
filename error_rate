@@ -1,0 +1,367 @@
+#!/usr/bin/env python3
+# coding=utf8
+
+# Copyright  2021  Jiayu DU
+
+import sys
+import argparse
+import json
+
+import logging
+logging.basicConfig(stream=sys.stderr, level=logging.INFO, format='[%(levelname)s] %(message)s')
+
+DEBUG = None
+
+def GetEditType(ref_token, hyp_token):
+    if ref_token == None and hyp_token != None:
+        return 'I'
+    elif ref_token != None and hyp_token == None:
+        return 'D'
+    elif ref_token == hyp_token:
+        return 'C'
+    elif ref_token != hyp_token:
+        return 'S'
+    else:
+        raise RuntimeError
+
+class AlignmentArc:
+    def __init__(self, src, dst, ref, hyp):
+        self.src = src
+        self.dst = dst
+        self.ref = ref
+        self.hyp = hyp
+        self.edit = GetEditType(ref, hyp)
+
+def similarity_score_function(ref_token, hyp_token):
+    return 0 if (ref_token == hyp_token) else -1.0
+
+def insertion_score_function(token):
+    return -1.0
+
+def deletion_score_function(token):
+    return -1.0
+
+def EditDistance(
+        ref,
+        hyp,
+        similarity_score_function = similarity_score_function,
+        insertion_score_function = insertion_score_function,
+        deletion_score_function = deletion_score_function):
+    assert(len(ref) != 0)
+    class DPState:
+        def __init__(self):
+            self.score = -float('inf')
+            # backpointer
+            self.prev_r = None
+            self.prev_h = None
+
+    def print_search_grid(S, R, H, fstream):
+        print(file=fstream)
+        for r in range(R):
+            for h in range(H):
+                print(F'[{r},{h}]:{S[r][h].score:4.3f}:({S[r][h].prev_r},{S[r][h].prev_h}) ', end='', file=fstream)
+            print(file=fstream)
+
+    R = len(ref) + 1
+    H = len(hyp) + 1
+
+    # Construct DP search space, a (R x H) grid
+    S = [ [] for r in range(R) ]
+    for r in range(R):
+        S[r] = [ DPState() for x in range(H) ]
+
+    # initialize DP search grid origin, S(r = 0, h = 0)
+    S[0][0].score = 0.0
+    S[0][0].prev_r = None
+    S[0][0].prev_h = None
+
+    # initialize REF axis
+    for r in range(1, R):
+        S[r][0].score = S[r-1][0].score + deletion_score_function(ref[r-1])
+        S[r][0].prev_r = r-1
+        S[r][0].prev_h = 0
+
+    # initialize HYP axis
+    for h in range(1, H):
+        S[0][h].score = S[0][h-1].score + insertion_score_function(hyp[h-1])
+        S[0][h].prev_r = 0
+        S[0][h].prev_h = h-1
+
+    best_score = S[0][0].score
+    best_state = (0, 0)
+
+    for r in range(1, R):
+        for h in range(1, H):
+            sub_or_cor_score = similarity_score_function(ref[r-1], hyp[h-1])
+            new_score = S[r-1][h-1].score + sub_or_cor_score
+            if new_score >= S[r][h].score:
+                S[r][h].score = new_score
+                S[r][h].prev_r = r-1
+                S[r][h].prev_h = h-1
+
+            del_score = deletion_score_function(ref[r-1])
+            new_score = S[r-1][h].score + del_score
+            if new_score >= S[r][h].score:
+                S[r][h].score = new_score
+                S[r][h].prev_r = r - 1
+                S[r][h].prev_h = h
+
+            ins_score = insertion_score_function(hyp[h-1])
+            new_score = S[r][h-1].score + ins_score
+            if new_score >= S[r][h].score:
+                S[r][h].score = new_score
+                S[r][h].prev_r = r
+                S[r][h].prev_h = h-1
+
+    best_score = S[R-1][H-1].score
+    best_state = (R-1, H-1)
+
+    if DEBUG:
+        print_search_grid(S, R, H, sys.stderr)
+
+    # Backtracing best alignment path, i.e. a list of arcs
+    # arc = (src, dst, ref, hyp, edit)
+    # src/dst = (r, h), where r/h refers to search grid state-id along Ref/Hyp axis
+    best_path = []
+    r, h = best_state[0], best_state[1]
+    prev_r, prev_h = S[r][h].prev_r, S[r][h].prev_h
+    score = S[r][h].score
+    # loop invariant:
+    #   1. (prev_r, prev_h) -> (r, h) is a "forward arc" on best alignment path
+    #   2. score is the value of point(r, h) on DP search grid
+    while prev_r != None or prev_h != None:
+        src = (prev_r, prev_h)
+        dst = (r, h)
+        if (r == prev_r + 1 and h == prev_h + 1): # Substitution or correct
+            arc = AlignmentArc(src, dst, ref[prev_r], hyp[prev_h])
+        elif (r == prev_r + 1 and h == prev_h): # Deletion
+            arc = AlignmentArc(src, dst, ref[prev_r], None)
+        elif (r == prev_r and h == prev_h + 1): # Insertion
+            arc = AlignmentArc(src, dst, None, hyp[prev_h])
+        else:
+            raise RuntimeError
+        best_path.append(arc)
+        r, h = prev_r, prev_h
+        prev_r, prev_h = S[r][h].prev_r, S[r][h].prev_h
+        score = S[r][h].score
+
+    best_path.reverse()
+    return (best_path, best_score)
+
+
+def TokenWidth(token: str):
+    def CharWidth(c):
+        return 2 if (c >= '\u4e00') and (c <= '\u9fa5') else 1
+    return sum([ CharWidth(c) for c in token ])
+
+
+def PrettyPrintAlignment(alignment, stream = sys.stderr):
+    def display_token(token):
+        return token if token else '*'
+
+    def display_edit(edit):
+        return '' if edit == 'C' else edit
+
+    H = '  HYP  : '
+    R = '  REF  : '
+    E = '  EDIT : '
+    for arc in alignment:
+        h = display_token(arc.hyp)
+        r = display_token(arc.ref)
+        e = display_edit(arc.edit)
+
+        nr, nh, ne = TokenWidth(r), TokenWidth(h), TokenWidth(e)
+        n = max(nr, nh, ne) + 1
+
+        H += h + ' ' * (n-nh)
+        R += r + ' ' * (n-nr)
+        E += e + ' ' * (n-ne)
+
+    print(H, file=stream)
+    print(R, file=stream)
+    print(E, file=stream)
+
+def CountEdits(alignment):
+    c, s, i, d = 0, 0, 0, 0
+    for arc in alignment:
+        if arc.edit == 'C':
+            c += 1
+        elif arc.edit == 'S':
+            s += 1
+        elif arc.edit == 'I':
+            i += 1
+        elif arc.edit == 'D':
+            d += 1
+        else:
+            raise RuntimeError
+    return (c, s, i, d)
+
+def ComputeTokenErrorRate(c, s, i, d):
+    assert((c + s + d) != 0)
+    num_edits = (s + d + i)
+    ref_len = (c + s + d)
+    hyp_len = (c + s + i)
+    return 100.0 * num_edits / ref_len, 100.0 * num_edits / max(ref_len, hyp_len)
+
+def ComputeSentenceErrorRate(num_err_utts, num_utts):
+    assert(num_utts != 0)
+    return 100.0 * num_err_utts / num_utts
+
+
+class ErrorStats:
+    def __init__(self):
+        self.num_refs = 0
+        self.num_hyps = 0
+        self.num_hyp_without_ref = 0
+        self.num_hyp_with_empty_ref = 0
+
+        self.num_utts = 0 # seen in both ref & hyp
+
+        self.C = 0
+        self.S = 0
+        self.I = 0
+        self.D = 0
+
+        self.token_error_rate = 0.0
+        self.modified_token_error_rate = 0.0
+
+        self.num_utts_with_error = 0
+        self.sentence_error_rate = 0.0
+
+    def to_json(self):
+        return json.dumps(self.__dict__)
+
+    def to_kaldi(self):
+        return (
+            F'%WER {self.token_error_rate:.2f} [ {self.S + self.D + self.I} / {self.C + self.S + self.D}, {self.I} ins, {self.D} del, {self.S} sub ]\n'
+            F'%SER {self.sentence_error_rate:.2f} [ {self.num_utts_with_error} / {self.num_utts} ]\n'
+        )
+
+    def to_summary(self):
+        #return json.dumps(self.__dict__, indent=4)
+        summary = (
+            '==================== Overall Error Statistics ====================\n'
+            F'num_refs: {self.num_refs}\n'
+            F'num_hyps: {self.num_hyps}\n'
+            F'num_hyp_without_ref: {self.num_hyp_without_ref}\n'
+            F'num_hyp_with_empty_ref: {self.num_hyp_with_empty_ref}\n'
+            F'num_utts: {self.num_utts}\n'
+            F'token_error_rate: {self.token_error_rate:.2f}%\n'
+            F'modified_token_error_rate: {self.modified_token_error_rate:.2f}%\n'
+            F'sentence_error_rate: {self.sentence_error_rate:.2f}%\n'
+            F'token_stats:\n'
+            F'  - tokens:{self.C + self.S + self.D:>7}\n'
+            F'  - edits: {self.S + self.I + self.D:>7}\n'
+            F'  - cor:   {self.C:>7}\n'
+            F'  - sub:   {self.S:>7}\n'
+            F'  - ins:   {self.I:>7}\n'
+            F'  - del:   {self.D:>7}\n'
+            '============================================================\n'
+        )
+        return summary
+
+
+def LoadKaldiArc(filepath):
+    utts = {}
+    with open(filepath, 'r', encoding='utf8') as f:
+        for line in f:
+            cols = line.strip().split(maxsplit=1)
+            if len(cols) == 1 or len(cols) == 2:
+                key  = cols[0].strip()
+                text = cols[1].strip() if len(cols) == 2 else ''
+                if key not in utts:
+                    utts[key] = text
+                else:
+                    raise RuntimeError(F'Found duplicated utterence, key={key}')
+    return utts
+
+
+def GenerateTokenizer(tokenizer_type):
+    if tokenizer_type == 'whitespace':
+        def word_tokenizer(text):
+            return text.strip().split()
+        tokenizer = word_tokenizer
+    elif tokenizer_type == 'char':
+        def char_tokenizer(text):
+            return [ c for c in text.strip().replace(' ', '') ]
+        tokenizer = char_tokenizer
+    else:
+        raise RuntimeError
+    return tokenizer
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--tokenizer', choices=['whitespace', 'char'], default='whitespace', help='whitespace for WER, char for CER')
+    parser.add_argument('--logk', type=int, default=500 , help='whitespace for WER, char for CER')
+    parser.add_argument('--ref', type=str, required=True, help='input reference file')
+    parser.add_argument('--hyp', type=str, required=True, help='input hypothesis file')
+    parser.add_argument('result', type=str)
+    args = parser.parse_args()
+    logging.info(args)
+
+    logging.info('Generating tokenizer ...')
+    tokenizer = GenerateTokenizer(args.tokenizer)
+    assert(tokenizer)
+
+    logging.info('Loading REF and HYP ...')
+    refs = LoadKaldiArc(args.ref)
+    hyps = LoadKaldiArc(args.hyp)
+    stats = ErrorStats()
+
+    # check valid utterances in hyp that have matched non-empty reference
+    stats.num_hyp_without_ref = 0
+    utts = []
+    for utt in sorted(hyps.keys()):
+        if utt in refs: # TODO: efficiency
+            if refs[utt]: # non-empty reference
+                utts.append(utt)
+            else:
+                logging.warning(F'Found {utt} with empty reference, skipping...')
+                stats.num_hyp_with_empty_ref += 1
+        else:
+            logging.warning(F'Found {utt} without reference, skipping...')
+            stats.num_hyp_without_ref += 1
+
+    stats.num_hyps = len(hyps)
+    stats.num_refs = len(refs)
+    stats.num_utts = len(utts)
+
+    logging.info('Evaluating Error Rate ...')
+    ndone = 0
+    with open(args.result, 'w+', encoding='utf8') as fo:
+        for utt in utts:
+            alignment, score = EditDistance(
+                tokenizer(refs[utt]),
+                tokenizer(hyps[utt]),
+            )
+            c, s, i, d = CountEdits(alignment)
+            ter, mter = ComputeTokenErrorRate(c, s, i, d)
+
+            if ter > 0:
+                stats.num_utts_with_error += 1
+
+            # utt-level evaluation result
+            print(F'{{"utt":{utt}, "score":{score}, "TER":{ter:.2f}, "mTER":{mter:.2f}, "cor":{c}, "sub":{s}, "ins":{i}, "del":{d}}}', file=fo)
+            PrettyPrintAlignment(alignment, fo)
+
+            stats.C += c
+            stats.S += s
+            stats.I += i
+            stats.D += d
+
+            ndone += 1
+            if ndone % args.logk == 0:
+                logging.info(f'{ndone:7d} utts evaluated.')
+        logging.info(f'{ndone:7d} utts evaluated in total.')
+
+        # corpus level evaluation result
+        stats.token_error_rate, stats.modified_token_error_rate = ComputeTokenErrorRate(stats.C, stats.S, stats.I, stats.D)
+        stats.sentence_error_rate = ComputeSentenceErrorRate(stats.num_utts_with_error, stats.num_utts)
+
+        print(stats.to_summary(), file=fo)
+
+    #print(stats.to_json())
+    #print(stats.to_kaldi())
+    print(stats.to_summary())
+
