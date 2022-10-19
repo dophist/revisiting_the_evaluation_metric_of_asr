@@ -166,12 +166,9 @@ def PrettyPrintAlignment(alignment, stream = sys.stderr):
     R = '  REF  : '
     E = '  EDIT : '
     for arc in alignment:
-        h = token_repr(arc.hyp)
-        r = token_repr(arc.ref)
-        e = edit_repr(arc.edit)
-
-        nr, nh, ne = display_width(r), display_width(h), display_width(e)
-        n = max(nr, nh, ne) + 1
+        h, r, e = token_repr(arc.hyp), token_repr(arc.ref), edit_repr(arc.edit)
+        nh, nr, ne = display_width(h), display_width(r), display_width(e)
+        n = max(nh, nr, ne) + 1
 
         H += h + ' ' * (n-nh)
         R += r + ' ' * (n-nr)
@@ -180,6 +177,7 @@ def PrettyPrintAlignment(alignment, stream = sys.stderr):
     print(H, file=stream)
     print(R, file=stream)
     print(E, file=stream)
+
 
 def CountEdits(alignment):
     c, s, i, d = 0, 0, 0, 0
@@ -196,12 +194,14 @@ def CountEdits(alignment):
             raise RuntimeError
     return (c, s, i, d)
 
+
 def ComputeTokenErrorRate(c, s, i, d):
     assert((c + s + d) != 0)
     num_edits = (s + d + i)
     ref_len = (c + s + d)
     hyp_len = (c + s + i)
     return 100.0 * num_edits / ref_len, 100.0 * num_edits / max(ref_len, hyp_len)
+
 
 def ComputeSentenceErrorRate(num_err_utts, num_utts):
     assert(num_utts != 0)
