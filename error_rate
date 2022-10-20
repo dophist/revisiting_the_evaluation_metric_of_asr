@@ -24,7 +24,15 @@ def GetEditType(ref_token, hyp_token):
     else:
         raise RuntimeError
 
-class AlignmentArc:
+
+class LatticeState:
+    def __init__(self):
+        self.score = -float('inf')
+        # backpointer
+        self._x = None
+        self._y = None
+
+class LatticeArc:
     def __init__(self, src, dst, ref, hyp):
         self.src = src
         self.dst = dst
@@ -32,119 +40,94 @@ class AlignmentArc:
         self.hyp = hyp
         self.edit = GetEditType(ref, hyp)
 
-def similarity_score_function(ref_token, hyp_token):
-    return 0 if (ref_token == hyp_token) else -1.0
-
-def insertion_score_function(token):
-    return -1.0
-
-def deletion_score_function(token):
-    return -1.0
 
 def EditDistance(
-    ref,
-    hyp,
-    similarity_score_function = similarity_score_function,
-    insertion_score_function = insertion_score_function,
-    deletion_score_function = deletion_score_function,
+    I,
+    O,
+    SUB = lambda T1, T2: 0 if (T1 == T2) else -1.0,
+    INS = lambda T: -1.0,
+    DEL = lambda T: -1.0,
 ):
-    assert(len(ref) != 0)
-    class DPState:
-        def __init__(self):
-            self.score = -float('inf')
-            # backpointer
-            self.prev_r = None
-            self.prev_h = None
-
-    def print_search_grid(S, R, H, fstream):
+    assert(len(I) != 0)
+    def print_lattice(S, X, Y, fstream):
         print(file=fstream)
-        for r in range(R):
-            for h in range(H):
-                print(F'[{r},{h}]:{S[r][h].score:4.3f}:({S[r][h].prev_r},{S[r][h].prev_h}) ', end='', file=fstream)
+        for x in range(X):
+            for y in range(Y):
+                print(F'[{x},{y}]:{S[x][y].score:4.3f}:({S[x][y]._x},{S[x][y]._y}) ', end='', file=fstream)
             print(file=fstream)
 
-    R = len(ref) + 1
-    H = len(hyp) + 1
+    # Construct a (X * Y) search lattice
+    X = len(I) + 1
+    Y = len(O) + 1
+    S = [ [ LatticeState() for _ in range(Y) ] for _ in range(X) ] # indexing system: S[x][y]
 
-    # Construct DP search space, a (R x H) grid
-    S = [ [] for r in range(R) ]
-    for r in range(R):
-        S[r] = [ DPState() for x in range(H) ]
+    # init origin
+    s = S[0][0]
+    s.score = 0.0
+    s._x, s._y = None, None
 
-    # initialize DP search grid origin, S(r = 0, h = 0)
-    S[0][0].score = 0.0
-    S[0][0].prev_r = None
-    S[0][0].prev_h = None
+    # init x-axis
+    for x in range(1, X):
+        s = S[x][0]
+        s.score = S[x-1][0].score + DEL(I[x-1])
+        s._x, s._y = x-1, 0
 
-    # initialize REF axis
-    for r in range(1, R):
-        S[r][0].score = S[r-1][0].score + deletion_score_function(ref[r-1])
-        S[r][0].prev_r = r-1
-        S[r][0].prev_h = 0
+    # init y-axis
+    for y in range(1, Y):
+        s = S[0][y]
+        s.score = S[0][y-1].score + INS(O[y-1])
+        s._x, s._y = 0, y-1
 
-    # initialize HYP axis
-    for h in range(1, H):
-        S[0][h].score = S[0][h-1].score + insertion_score_function(hyp[h-1])
-        S[0][h].prev_r = 0
-        S[0][h].prev_h = h-1
+    for x in range(1, X):
+        for y in range(1, Y):
+            s = S[x][y]
 
-    best_score = S[0][0].score
-    best_state = (0, 0)
+            score = S[x-1][y-1].score + SUB(I[x-1], O[y-1])
+            if score >= s.score:
+                s.score = score
+                s._x, s._y = x-1, y-1
 
-    for r in range(1, R):
-        for h in range(1, H):
-            sub_or_cor_score = similarity_score_function(ref[r-1], hyp[h-1])
-            new_score = S[r-1][h-1].score + sub_or_cor_score
-            if new_score >= S[r][h].score:
-                S[r][h].score = new_score
-                S[r][h].prev_r = r-1
-                S[r][h].prev_h = h-1
+            score = S[x-1][y].score + DEL(I[x-1])
+            if score >= s.score:
+                s.score = score
+                s._x, s._y = x-1, y
 
-            del_score = deletion_score_function(ref[r-1])
-            new_score = S[r-1][h].score + del_score
-            if new_score >= S[r][h].score:
-                S[r][h].score = new_score
-                S[r][h].prev_r = r - 1
-                S[r][h].prev_h = h
-
-            ins_score = insertion_score_function(hyp[h-1])
-            new_score = S[r][h-1].score + ins_score
-            if new_score >= S[r][h].score:
-                S[r][h].score = new_score
-                S[r][h].prev_r = r
-                S[r][h].prev_h = h-1
-
-    best_score = S[R-1][H-1].score
-    best_state = (R-1, H-1)
+            score = S[x][y-1].score + INS(O[y-1])
+            if score >= s.score:
+                s.score = score
+                s._x, s._y = x, y-1
 
     if DEBUG:
-        print_search_grid(S, R, H, sys.stderr)
+        print_lattice(S, X, Y, sys.stderr)
 
     # Backtracing best alignment path, i.e. a list of arcs
-    # arc = (src, dst, ref, hyp, edit)
-    # src/dst = (r, h), where r/h refers to search grid state-id along Ref/Hyp axis
+    # arc = (src, dst, i, o, edit)
+    # src/dst = (x, y), where x/y refers to search grid state-id along x/y axis
+    best_score = S[-1][-1].score
+    best_state = (X-1, Y-1)
+
     best_path = []
-    r, h = best_state[0], best_state[1]
-    prev_r, prev_h = S[r][h].prev_r, S[r][h].prev_h
-    score = S[r][h].score
+    x, y = best_state[0], best_state[1]
+    _x, _y = S[x][y]._x, S[x][y]._y
+    score = S[x][y].score
     # loop invariant:
-    #   1. (prev_r, prev_h) -> (r, h) is a "forward arc" on best alignment path
-    #   2. score is the value of point(r, h) on DP search grid
-    while prev_r != None or prev_h != None:
-        src = (prev_r, prev_h)
-        dst = (r, h)
-        if (r == prev_r + 1 and h == prev_h + 1): # Substitution or correct
-            arc = AlignmentArc(src, dst, ref[prev_r], hyp[prev_h])
-        elif (r == prev_r + 1 and h == prev_h): # Deletion
-            arc = AlignmentArc(src, dst, ref[prev_r], None)
-        elif (r == prev_r and h == prev_h + 1): # Insertion
-            arc = AlignmentArc(src, dst, None, hyp[prev_h])
+    #   1. (_x, _y) -> (x, y) is a "forward arc" on best alignment path
+    #   2. score is the value of point(x, y) on DP search grid
+    while _x != None or _y != None:
+        src = (_x, _y)
+        dst = (x, y)
+        if (x == _x + 1 and y == _y + 1): # Substitution or correct
+            arc = LatticeArc(src, dst, I[_x], O[_y])
+        elif (x == _x + 1 and y == _y): # Deletion
+            arc = LatticeArc(src, dst, I[_x], None)
+        elif (x == _x and y == _y + 1): # Insertion
+            arc = LatticeArc(src, dst, None, O[_y])
         else:
             raise RuntimeError
         best_path.append(arc)
-        r, h = prev_r, prev_h
-        prev_r, prev_h = S[r][h].prev_r, S[r][h].prev_h
-        score = S[r][h].score
+        x, y = _x, _y
+        _x, _y = S[x][y]._x, S[x][y]._y
+        score = S[x][y].score
 
     best_path.reverse()
     return (best_path, best_score)
@@ -293,8 +276,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--tokenizer', choices=['whitespace', 'char'], default='whitespace', help='whitespace for WER, char for CER')
     parser.add_argument('--logk', type=int, default=500 , help='whitespace for WER, char for CER')
-    parser.add_argument('--ref', type=str, required=True, help='input reference file')
-    parser.add_argument('--hyp', type=str, required=True, help='input hypothesis file')
+    parser.add_argument('-x', '--ref', type=str, required=True, help='input reference file')
+    parser.add_argument('-y', '--hyp', type=str, required=True, help='input hypothesis file')
     parser.add_argument('result', type=str)
     args = parser.parse_args()
     logging.info(args)
@@ -316,11 +299,11 @@ if __name__ == '__main__':
             if refs[utt]: # non-empty reference
                 utts.append(utt)
             else:
-                logging.warning(F'Found {utt} with empty reference, skipping...')
                 stats.hyp_with_empty_ref += 1
+                logging.warning(F'Found {utt} with empty reference, skipping...')
         else:
-            logging.warning(F'Found {utt} without reference, skipping...')
             stats.hyp_without_ref += 1
+            logging.warning(F'Found {utt} without reference, skipping...')
 
     stats.hyps = len(hyps)
     stats.refs = len(refs)

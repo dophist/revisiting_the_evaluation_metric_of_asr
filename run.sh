@@ -1,1 +1,1 @@
-./error_rate --tokenizer whitespace --ref data/ref.txt --hyp data/hyp.txt DETAILS.txt
+./error_rate -x data/ref.txt -y data/hyp.txt DETAILS.txt
