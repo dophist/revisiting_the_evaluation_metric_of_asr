@@ -10,12 +10,12 @@ import json
 import logging
 logging.basicConfig(stream=sys.stderr, level=logging.INFO, format='[%(levelname)s] %(message)s')
 
-DEBUG = None
+DEBUG = False
 
 def GetEditType(i, o):
-    if i == None and o != None:
+    if not i and o:
         return 'I'
-    elif i != None and o == None:
+    elif i and not o:
         return 'D'
     elif i == o:
         return 'C'
@@ -26,13 +26,12 @@ def GetEditType(i, o):
 
 
 class LatticeState:
-    def __init__(self):
+    def __init__(self, x, y):
         self.score = -float('inf')
-        # backpointer
-        self._x = None
-        self._y = None
+        self.x, self.y = x, y
+        self._x, self._y = None, None # backpointer
 
-class LatticeArc:
+class AlignmentArc:
     def __init__(self, src, dst, i, o):
         self.src = src
         self.dst = dst
@@ -51,8 +50,8 @@ def EditDistance(
     assert(len(I) != 0)
     def print_lattice(S, X, Y, fstream):
         print(file=fstream)
-        for x in range(X):
-            for y in range(Y):
+        for y in range(Y):
+            for x in range(X):
                 print(F'[{x},{y}]:{S[x][y].score:4.3f}:({S[x][y]._x},{S[x][y]._y}) ', end='', file=fstream)
             print(file=fstream)
 
@@ -66,26 +65,26 @@ def EditDistance(
     #   { S[x][y] } -- token:I[x] -- { S[x+1][y] } ...
     X = len(I) + 1
     Y = len(O) + 1
-    S = [ [ LatticeState() for _ in range(Y) ] for _ in range(X) ]
+    S = [ [ LatticeState(x, y) for y in range(Y) ] for x in range(X) ]
 
-    # origin
+    # Init origin
     s = S[0][0]
     s.score = 0.0
     s._x, s._y = None, None
 
-    # x-axis
+    # Fill x-axis
     for x in range(1, X):
         s = S[x][0]
         s.score = S[x-1][0].score + DEL(I[x-1])
         s._x, s._y = x-1, 0
 
-    # y-axis
+    # Fill y-axis
     for y in range(1, Y):
         s = S[0][y]
         s.score = S[0][y-1].score + INS(O[y-1])
         s._x, s._y = 0, y-1
 
-    # lattice internal
+    # Fill lattice internal
     for x in range(1, X):
         for y in range(1, Y):
             s = S[x][y]
@@ -108,37 +107,26 @@ def EditDistance(
     if DEBUG:
         print_lattice(S, X, Y, sys.stderr)
 
-    # Backtracing best alignment path, i.e. a list of arcs
-    # arc = (src, dst, i, o, edit)
-    # src/dst = (x, y), where x/y refers to search grid state-id along x/y axis
-    best_score = S[-1][-1].score
-    best_state = (X-1, Y-1)
-
-    best_path = []
-    x, y = best_state[0], best_state[1]
-    _x, _y = S[x][y]._x, S[x][y]._y
-    score = S[x][y].score
-    # loop invariant:
-    #   1. (_x, _y) -> (x, y) is a "forward arc" on best alignment path
-    #   2. score is the value of point(x, y) on DP search grid
-    while _x != None or _y != None:
-        src = (_x, _y)
-        dst = (x, y)
-        if (x == _x + 1 and y == _y + 1): # Substitution or correct
-            arc = LatticeArc(src, dst, I[_x], O[_y])
-        elif (x == _x + 1 and y == _y): # Deletion
-            arc = LatticeArc(src, dst, I[_x], None)
-        elif (x == _x and y == _y + 1): # Insertion
-            arc = LatticeArc(src, dst, None, O[_y])
+    # Traceback
+    # Loop invariant: traceback head at state q
+    # Termination: q reaches origin
+    alignment = []
+    q = S[-1][-1]
+    while not (q.x == 0 and q.y == 0):
+        p = S[q._x][q._y]
+        src, dst = (p.x, p.y), (q.x, q.y)
+        if q.x == p.x + 1 and q.y == p.y + 1: # Substitution or correct
+            arc = AlignmentArc(src, dst, I[p.x], O[p.y])
+        elif q.x == p.x + 1 and q.y == p.y: # Deletion
+            arc = AlignmentArc(src, dst, I[p.x], '')
+        elif q.x == p.x and q.y == p.y + 1: # Insertion
+            arc = AlignmentArc(src, dst, '', O[p.y])
         else:
             raise RuntimeError
-        best_path.append(arc)
-        x, y = _x, _y
-        _x, _y = S[x][y]._x, S[x][y]._y
-        score = S[x][y].score
-
-    best_path.reverse()
-    return (best_path, best_score)
+        alignment.append(arc)
+        q = p
+    alignment.reverse()
+    return (alignment, S[-1][-1].score)
 
 
 def PrettyAlignment(alignment):
