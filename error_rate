@@ -261,16 +261,11 @@ if __name__ == '__main__':
 
     stats = EvalStats()
 
-    logging.info('Generating tokenizer ...')
-    tokenizer = GenerateTokenizer(args.tokenizer)
-    assert(tokenizer)
-
     logging.info('Loading REF and HYP ...')
     refs = LoadKaldiArc(args.ref)
     hyps = LoadKaldiArc(args.hyp)
 
     # check valid utterances in hyp that have matched non-empty reference
-    stats.hyp_without_ref = 0
     utts = []
     for utt in sorted(hyps.keys()):
         if utt in refs: # TODO: efficiency
@@ -286,6 +281,10 @@ if __name__ == '__main__':
     stats.hyps = len(hyps)
     stats.refs = len(refs)
     stats.utts = len(utts)
+
+    logging.info('Generating tokenizer ...')
+    tokenizer = GenerateTokenizer(args.tokenizer)
+    assert(tokenizer)
 
     logging.info('Evaluating ...')
     ndone = 0
