@@ -44,7 +44,7 @@ class LatticeArc:
 def EditDistance(
     I,
     O,
-    SUB = lambda T1, T2: 0 if (T1 == T2) else -1.0,
+    SUB = lambda T1, T2: 0.0 if (T1 == T2) else -1.0,
     INS = lambda T: -1.0,
     DEL = lambda T: -1.0,
 ):
