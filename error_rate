@@ -57,12 +57,12 @@ def EditDistance(
             print(file=fstream)
 
     # Construct a (X * Y) search lattice
-    # For Lattice S, Input I and Output O,
-    # tokens of I and O are arcs connecting lattice states:
-    # indexing system: 
-    #   { S[x][y] }--I[x]-->{ S[x+1][y] }
-    #   { S[x][y] }--O[y]-->{ S[x][y+1] }
-    #   { S[x][y] }--I[x],O[y]-->{ S[x+1][y+1] }
+    # For Lattice S, Input I and Output O, indexing system: 
+    # S[x][y+1]
+    #    |
+    #   O[y]
+    #    |
+    # S[x][y] -- I[x] -- S[x+1][y]
     X = len(I) + 1
     Y = len(O) + 1
     S = [ [ LatticeState() for _ in range(Y) ] for _ in range(X) ]
