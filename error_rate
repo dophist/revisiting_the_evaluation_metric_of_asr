@@ -59,7 +59,10 @@ def EditDistance(
     # Construct a (X * Y) search lattice
     X = len(I) + 1
     Y = len(O) + 1
-    S = [ [ LatticeState() for _ in range(Y) ] for _ in range(X) ] # indexing system: S[x][y]
+    S = [ [ LatticeState() for _ in range(Y) ] for _ in range(X) ]
+    # indexing system: 
+    #   { S[x][y] }--token:I[x]-->{ S[x+1][y] }
+    #   { S[x][y] }--token:O[y]-->{ S[x][y+1] }
 
     # init origin
     s = S[0][0]
