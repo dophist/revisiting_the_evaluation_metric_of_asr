@@ -309,21 +309,17 @@ if __name__ == '__main__':
             )
             c, s, i, d = CountEdits(alignment)
             ter, mter = ComputeTokenErrorRate(c, s, i, d)
-
-            if ter > 0:
-                stats.utts_with_error += 1
-
             # utt-level details
-            print(
-                F'{{"utt":{utt}, "score":{score}, "TER":{ter:.2f}, "mTER":{mter:.2f}, "cor":{c}, "sub":{s}, "ins":{i}, "del":{d}}}',
-                *PrettyAlignment(alignment),
-                sep='\n', file=fo
-            )
+            print(F'{{"utt":{utt}, "score":{score}, "TER":{ter:.2f}, "mTER":{mter:.2f}, "cor":{c}, "sub":{s}, "ins":{i}, "del":{d}}}', file=fo)
+            print(*PrettyAlignment(alignment), sep='\n', file=fo)
 
             stats.C += c
             stats.S += s
             stats.I += i
             stats.D += d
+
+            if ter > 0:
+                stats.utts_with_error += 1
 
             ndone += 1
             if ndone % args.logk == 0:
