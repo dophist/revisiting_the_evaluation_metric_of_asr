@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # coding=utf8
 
-# Copyright  2021  Jiayu DU
+# Copyright  2022  Jiayu DU
 
 import sys
 import argparse
@@ -12,14 +12,14 @@ logging.basicConfig(stream=sys.stderr, level=logging.INFO, format='[%(levelname)
 
 DEBUG = None
 
-def GetEditType(ref_token, hyp_token):
-    if ref_token == None and hyp_token != None:
+def GetEditType(i, o):
+    if i == None and o != None:
         return 'I'
-    elif ref_token != None and hyp_token == None:
+    elif i != None and o == None:
         return 'D'
-    elif ref_token == hyp_token:
+    elif i == o:
         return 'C'
-    elif ref_token != hyp_token:
+    elif i != o:
         return 'S'
     else:
         raise RuntimeError
@@ -33,12 +33,12 @@ class LatticeState:
         self._y = None
 
 class LatticeArc:
-    def __init__(self, src, dst, ref, hyp):
+    def __init__(self, src, dst, i, o):
         self.src = src
         self.dst = dst
-        self.ref = ref
-        self.hyp = hyp
-        self.edit = GetEditType(ref, hyp)
+        self.i = i
+        self.o = o
+        self.edit = GetEditType(i, o)
 
 
 def EditDistance(
@@ -156,9 +156,9 @@ def PrettyPrintAlignment(alignment, stream = sys.stderr):
     R = '  REF  : '
     E = '  EDIT : '
     for arc in alignment:
-        h, r, e = token_repr(arc.hyp), token_repr(arc.ref), edit_repr(arc.edit)
-        nh, nr, ne = display_width(h), display_width(r), display_width(e)
-        n = max(nh, nr, ne) + 1
+        r, h, e = token_repr(arc.i), token_repr(arc.o), edit_repr(arc.edit)
+        nr, nh, ne = display_width(r), display_width(h), display_width(e)
+        n = max(nr, nh, ne) + 1
 
         H += h + ' ' * (n-nh)
         R += r + ' ' * (n-nr)
@@ -170,19 +170,10 @@ def PrettyPrintAlignment(alignment, stream = sys.stderr):
 
 
 def CountEdits(alignment):
-    c, s, i, d = 0, 0, 0, 0
+    counts = { 'C': 0, 'S': 0, 'I': 0, 'D': 0 }
     for arc in alignment:
-        if arc.edit == 'C':
-            c += 1
-        elif arc.edit == 'S':
-            s += 1
-        elif arc.edit == 'I':
-            i += 1
-        elif arc.edit == 'D':
-            d += 1
-        else:
-            raise RuntimeError
-    return (c, s, i, d)
+        counts[arc.edit] += 1
+    return (counts['C'], counts['S'], counts['I'], counts['D'])
 
 
 def ComputeTokenErrorRate(c, s, i, d):
@@ -206,17 +197,12 @@ class ErrorStats:
         self.hyp_with_empty_ref = 0
 
         self.utts = 0 # seen in both ref & hyp
-
-        self.C = 0
-        self.S = 0
-        self.I = 0
-        self.D = 0
-
-        self.token_error_rate = 0.0
-        self.modified_token_error_rate = 0.0
-
         self.utts_with_error = 0
         self.sentence_error_rate = 0.0
+
+        self.C, self.S, self.I, self.D = 0, 0, 0, 0
+        self.token_error_rate = 0.0
+        self.modified_token_error_rate = 0.0
 
     def to_json(self):
         return json.dumps(self.__dict__)
