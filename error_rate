@@ -186,7 +186,7 @@ def ComputeSentenceErrorRate(num_err_utts, num_utts):
     return 100.0 * num_err_utts / num_utts
 
 
-class ErrorStats:
+class EvalStats:
     def __init__(self):
         self.refs = 0
         self.hyps = 0
@@ -201,9 +201,6 @@ class ErrorStats:
         self.token_error_rate = 0.0
         self.modified_token_error_rate = 0.0
 
-    def to_json(self):
-        return json.dumps(self.__dict__)
-
     def to_kaldi(self):
         return (
             F'%WER {self.token_error_rate:.2f} [ {self.S + self.D + self.I} / {self.C + self.S + self.D}, {self.I} ins, {self.D} del, {self.S} sub ]\n'
@@ -211,9 +208,10 @@ class ErrorStats:
         )
 
     def to_summary(self):
-        #return json.dumps(self.__dict__, indent=4)
         summary = (
-            '==================== Overall Error Statistics ====================\n'
+            '=============== Overall Evaluation Statistics ===============\n'
+            F'EvalStats: {json.dumps(self.__dict__)}\n'
+            '--------------------------------------------------------\n'
             F'refs: {self.refs}\n'
             F'hyps: {self.hyps}\n'
             F'hyp_without_ref: {self.hyp_without_ref}\n'
@@ -228,7 +226,7 @@ class ErrorStats:
             F'TER:  {self.token_error_rate:.2f}%\n'
             F'mTER: {self.modified_token_error_rate:.2f}%\n'
             F'SER:  {self.sentence_error_rate:.2f}%\n'
-            '============================================================\n'
+            '========================================================\n'
         )
         return summary
 
@@ -272,6 +270,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
     logging.info(args)
 
+    stats = EvalStats()
+
     logging.info('Generating tokenizer ...')
     tokenizer = GenerateTokenizer(args.tokenizer)
     assert(tokenizer)
@@ -279,7 +279,6 @@ if __name__ == '__main__':
     logging.info('Loading REF and HYP ...')
     refs = LoadKaldiArc(args.ref)
     hyps = LoadKaldiArc(args.hyp)
-    stats = ErrorStats()
 
     # check valid utterances in hyp that have matched non-empty reference
     stats.hyp_without_ref = 0
@@ -313,7 +312,7 @@ if __name__ == '__main__':
             if ter > 0:
                 stats.utts_with_error += 1
 
-            # utt-level evaluation result
+            # utt-level details
             print(
                 F'{{"utt":{utt}, "score":{score}, "TER":{ter:.2f}, "mTER":{mter:.2f}, "cor":{c}, "sub":{s}, "ins":{i}, "del":{d}}}',
                 *PrettyAlignment(alignment),
@@ -334,6 +333,5 @@ if __name__ == '__main__':
     stats.token_error_rate, stats.modified_token_error_rate = ComputeTokenErrorRate(stats.C, stats.S, stats.I, stats.D)
     stats.sentence_error_rate = ComputeSentenceErrorRate(stats.utts_with_error, stats.utts)
 
-    print(stats.to_json())
     print(stats.to_kaldi())
     print(stats.to_summary())
