@@ -140,7 +140,7 @@ def EditDistance(
     return (best_path, best_score)
 
 
-def PrettyPrintAlignment(alignment, stream = sys.stderr):
+def PrettyAlignment(alignment):
     def token_repr(token):
         return token if token else '*'
 
@@ -163,12 +163,9 @@ def PrettyPrintAlignment(alignment, stream = sys.stderr):
         H += h + ' ' * (n-nh)
         R += r + ' ' * (n-nr)
         E += e + ' ' * (n-ne)
+    return H, R, E
 
-    print(H, file=stream)
-    print(R, file=stream)
-    print(E, file=stream)
-
-
+ 
 def CountEdits(alignment):
     counts = { 'C': 0, 'S': 0, 'I': 0, 'D': 0 }
     for arc in alignment:
@@ -271,7 +268,7 @@ if __name__ == '__main__':
     parser.add_argument('--logk', type=int, default=500 , help='whitespace for WER, char for CER')
     parser.add_argument('-x', '--ref', type=str, required=True, help='input reference file')
     parser.add_argument('-y', '--hyp', type=str, required=True, help='input hypothesis file')
-    parser.add_argument('result', type=str)
+    parser.add_argument('details', type=str)
     args = parser.parse_args()
     logging.info(args)
 
@@ -304,7 +301,7 @@ if __name__ == '__main__':
 
     logging.info('Evaluating ...')
     ndone = 0
-    with open(args.result, 'w+', encoding='utf8') as fo:
+    with open(args.details, 'w+', encoding='utf8') as fo:
         for utt in utts:
             alignment, score = EditDistance(
                 tokenizer(refs[utt]),
@@ -317,8 +314,11 @@ if __name__ == '__main__':
                 stats.utts_with_error += 1
 
             # utt-level evaluation result
-            print(F'{{"utt":{utt}, "score":{score}, "TER":{ter:.2f}, "mTER":{mter:.2f}, "cor":{c}, "sub":{s}, "ins":{i}, "del":{d}}}', file=fo)
-            PrettyPrintAlignment(alignment, fo)
+            print(
+                F'{{"utt":{utt}, "score":{score}, "TER":{ter:.2f}, "mTER":{mter:.2f}, "cor":{c}, "sub":{s}, "ins":{i}, "del":{d}}}',
+                *PrettyAlignment(alignment),
+                sep='\n', file=fo
+            )
 
             stats.C += c
             stats.S += s
@@ -328,15 +328,12 @@ if __name__ == '__main__':
             ndone += 1
             if ndone % args.logk == 0:
                 logging.info(f'{ndone:7d} utts evaluated.')
-        logging.info(f'{ndone:7d} utts evaluated in total.')
+    logging.info(f'{ndone:7d} utts evaluated in total.')
 
-        # corpus level evaluation result
-        stats.token_error_rate, stats.modified_token_error_rate = ComputeTokenErrorRate(stats.C, stats.S, stats.I, stats.D)
-        stats.sentence_error_rate = ComputeSentenceErrorRate(stats.utts_with_error, stats.utts)
-
-        print(stats.to_summary(), file=fo)
+    # corpus level evaluation result
+    stats.token_error_rate, stats.modified_token_error_rate = ComputeTokenErrorRate(stats.C, stats.S, stats.I, stats.D)
+    stats.sentence_error_rate = ComputeSentenceErrorRate(stats.utts_with_error, stats.utts)
 
     print(stats.to_json())
     print(stats.to_kaldi())
     print(stats.to_summary())
-
