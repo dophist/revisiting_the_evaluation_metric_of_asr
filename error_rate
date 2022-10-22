@@ -25,7 +25,6 @@ def EditDistance(
     INS = lambda T: 1.0,
     DEL = lambda T: 1.0,
 ):
-    assert(len(I) != 0)
     # For Input I and Output O, a search lattice S of size (X * Y),
     # indexing system:
     #   x-axis step:   { S[x][y] } token:I[x] { S[x+1][y] }
@@ -79,20 +78,20 @@ def PrettyAlignment(alignment):
             return 2 if (c >= '\u4e00') and (c <= '\u9fa5') else 1
         return sum([ char_width(c) for c in token ])
 
-    R = '  REF  : '
-    H = '  HYP  : '
-    E = '  EDIT : '
+    I = '  I : '
+    O = '  O : '
+    E = '  E : '
     for arc in alignment:
-        r, h = token_repr(arc.i), token_repr(arc.o)
+        i, o = token_repr(arc.i), token_repr(arc.o)
         e = '' if arc.edit == 'C' else arc.edit  # don't bother printing 'C'
 
-        nr, nh, ne = display_width(r), display_width(h), display_width(e)
-        n = max(nr, nh, ne) + 1
+        ni, no, ne = display_width(i), display_width(o), display_width(e)
+        n = max(ni, no, ne) + 1
 
-        R += r + ' ' * (n-nr)
-        H += h + ' ' * (n-nh)
+        I += i + ' ' * (n-ni)
+        O += o + ' ' * (n-no)
         E += e + ' ' * (n-ne)
-    return H, R, E
+    return I, O, E
 
  
 def CountEdits(alignment):
@@ -224,30 +223,81 @@ if __name__ == '__main__':
     stats.utts = len(utts)
 
     logging.info('Generating tokenizer ...')
-    tokenizer = GenerateTokenizer(args.tokenizer)
-    assert(tokenizer)
+    #tokenizer = GenerateTokenizer(args.tokenizer)
+    #assert(tokenizer)
+    wtokenizer = GenerateTokenizer('whitespace')
+    ctokenizer = GenerateTokenizer('char')
 
     logging.info('Evaluating ...')
     ndone = 0
     with open(args.details, 'w+', encoding='utf8') as fo:
         for utt in utts:
-            distance, alignment = EditDistance(
-                tokenizer(refs[utt]),
-                tokenizer(hyps[utt]),
+            # CER & mCER
+            ced, alignment = EditDistance(
+                ctokenizer(refs[utt]),
+                ctokenizer(hyps[utt]),
             )
             c, s, i, d = CountEdits(alignment)
-            ter, mter = ComputeTokenErrorRate(c, s, i, d)
-
-            # utt-level details
-            print(F'{{"utt":{utt}, "distance":{distance}, "TER":{ter:.2f}, "mTER":{mter:.2f}, "cor":{c}, "sub":{s}, "ins":{i}, "del":{d}}}', file=fo)
+            cer, mcer = ComputeTokenErrorRate(c, s, i, d)
+            print(F'{{"utt":{utt}, "CER":{cer:.2f}, "mCER":{mcer:.2f}, "CLevED":{ced}, "cor":{c}, "sub":{s}, "ins":{i}, "del":{d}}}', file=fo)
             print(*PrettyAlignment(alignment), sep='\n', file=fo)
+
+            # WER & mWER
+            wed, alignment = EditDistance(
+                wtokenizer(refs[utt]),
+                wtokenizer(hyps[utt]),
+            )
+            c, s, i, d = CountEdits(alignment)
+            wer, mwer = ComputeTokenErrorRate(c, s, i, d)
+            print(F'{{"utt":{utt}, "WER":{wer:.2f}, "mWER":{mwer:.2f}, "WLevED":{wed}, "cor":{c}, "sub":{s}, "ins":{i}, "del":{d}}}', file=fo)
+            print(*PrettyAlignment(alignment), sep='\n', file=fo)
+
+            # NIER
+            K_ref, _ = EditDistance(
+                [],
+                wtokenizer(refs[utt]),
+                SUB = lambda T1, T2: 0.0 if T1 == T2 else float(len(T2)),
+                INS = lambda T: float(len(T)),
+                DEL = lambda T: 0.0,
+            )
+
+            K_hyp, _ = EditDistance(
+                [],
+                wtokenizer(hyps[utt]),
+                SUB = lambda T1, T2: 0.0 if T1 == T2 else float(len(T2)),
+                INS = lambda T: float(len(T)),
+                DEL = lambda T: 0.0,
+            )
+
+            K_ref2hyp, alignment1 = EditDistance(
+                wtokenizer(refs[utt]),
+                wtokenizer(hyps[utt]),
+                SUB = lambda T1, T2: 0.0 if T1 == T2 else float(len(T2)),
+                INS = lambda T: float(len(T)),
+                DEL = lambda T: 0.0,
+            )
+
+            K_hyp2ref, alignment2 = EditDistance(
+                wtokenizer(hyps[utt]),
+                wtokenizer(refs[utt]),
+                SUB = lambda T1, T2: 0.0 if T1 == T2 else float(len(T2)),
+                INS = lambda T: float(len(T)),
+                DEL = lambda T: 0.0,
+            )
+            nier = max(K_ref2hyp, K_hyp2ref) / max(K_ref, K_hyp) * 100
+            print(F'{{"utt":{utt}, "NIER":{nier:.2f}, "K(hyp|ref)":{K_ref2hyp:.1f}, "K(ref|hyp)":{K_hyp2ref:.1f}, "K(ref)":{K_ref:.1f}, "K(hyp):":{K_hyp:.1f} }}', file=fo)
+            print(*PrettyAlignment(alignment1), sep='\n', file=fo)
+            print(*PrettyAlignment(alignment2), sep='\n', file=fo)
+
+            print(F'{{"utt":{utt}, "CER":{cer:.2f}, "mCER":{mcer:.2f}, "WER":{wer:.2f}, "mWER":{mwer:.2f}, "NIER":{nier:.2f} }}', file=fo)
+            print('-' * 50, file=fo)
 
             stats.C += c
             stats.S += s
             stats.I += i
             stats.D += d
 
-            if ter > 0:
+            if wer > 0:
                 stats.utts_with_error += 1
 
             ndone += 1
