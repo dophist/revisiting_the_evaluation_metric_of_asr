@@ -7,8 +7,8 @@ logging.basicConfig(stream=sys.stderr, level=logging.INFO, format='[%(levelname)
 
 class LatticeState:
     def __init__(self, x, y):
-        self.score = -float('inf')
-        #self.x, self.y = x, y
+        self.distance = float('inf')
+        self.x, self.y = x, y
         self.bp = None  # backpointer
 
 
@@ -33,41 +33,41 @@ class BackPointer:
 def EditDistance(
     I,
     O,
-    SUB = lambda T1, T2: 0.0 if (T1 == T2) else -1.0,
-    INS = lambda T: -1.0,
-    DEL = lambda T: -1.0,
+    SUB = lambda T1, T2: 0.0 if (T1 == T2) else 1.0,
+    INS = lambda T: 1.0,
+    DEL = lambda T: 1.0,
 ):
     assert(len(I) != 0)
-    # For Input I and Output O, a search lattice S of size (X * Y), indexing system:
-    # x-axis shift:   { S[x][y] }  I[x]       { S[x+1][y] }
-    # y-axis shift:   { S[x][y] }       O[y]  { S[x][y+1] }
-    # diagonal shift: { S[x][y] }  I[x],O[y]  { S[x+1][y+1] }
+    # For Input I and Output O, a search lattice S of size (X * Y),
+    # indexing system:
+    #   x-axis step:   { S[x][y] } token:I[x] { S[x+1][y] }
+    #   y-axis step:   { S[x][y] } token:O[y] { S[x][y+1] }
     X = len(I) + 1
     Y = len(O) + 1
     S = [ [ LatticeState(x, y) for y in range(Y) ] for x in range(X) ]
 
     # Fill lattice states
-    S[0][0].score = 0.0
+    S[0][0].distance = 0.0
     for x in range(X):
         for y in range(Y):
             s = S[x][y]
 
             if x-1 >= 0 and y-1 >= 0:
-                score = S[x-1][y-1].score + SUB(I[x-1], O[y-1])
-                if score >= s.score:
-                    s.score = score
+                d = S[x-1][y-1].distance + SUB(I[x-1], O[y-1])
+                if d < s.distance:
+                    s.distance = d
                     s.bp = BackPointer(x-1, y-1, I[x-1], O[y-1])
 
             if x-1 >= 0:
-                score = S[x-1][y].score + DEL(I[x-1])
-                if score >= s.score:
-                    s.score = score
+                d = S[x-1][y].distance + DEL(I[x-1])
+                if d < s.distance:
+                    s.distance = d
                     s.bp = BackPointer(x-1, y, I[x-1], '')
 
             if y-1 >= 0:
-                score = S[x][y-1].score + INS(O[y-1])
-                if score >= s.score:
-                    s.score = score
+                d = S[x][y-1].distance + INS(O[y-1])
+                if d < s.distance:
+                    s.distance = d
                     s.bp = BackPointer(x, y-1, '', O[y-1])
 
     # Traceback
@@ -79,7 +79,7 @@ def EditDistance(
         alignment.append(s.bp)
         s = S[s.bp.x][s.bp.y]
     alignment.reverse()
-    return (alignment, S[-1][-1].score)
+    return (S[-1][-1].distance, alignment)
 
 
 def PrettyAlignment(alignment):
@@ -242,14 +242,14 @@ if __name__ == '__main__':
     ndone = 0
     with open(args.details, 'w+', encoding='utf8') as fo:
         for utt in utts:
-            alignment, score = EditDistance(
+            distance, alignment = EditDistance(
                 tokenizer(refs[utt]),
                 tokenizer(hyps[utt]),
             )
             c, s, i, d = CountEdits(alignment)
             ter, mter = ComputeTokenErrorRate(c, s, i, d)
             # utt-level details
-            print(F'{{"utt":{utt}, "score":{score}, "TER":{ter:.2f}, "mTER":{mter:.2f}, "cor":{c}, "sub":{s}, "ins":{i}, "del":{d}}}', file=fo)
+            print(F'{{"utt":{utt}, "distance":{distance}, "TER":{ter:.2f}, "mTER":{mter:.2f}, "cor":{c}, "sub":{s}, "ins":{i}, "del":{d}}}', file=fo)
             print(*PrettyAlignment(alignment), sep='\n', file=fo)
 
             stats.C += c
@@ -263,7 +263,7 @@ if __name__ == '__main__':
             ndone += 1
             if ndone % args.logk == 0:
                 logging.info(f'{ndone:7d} utts evaluated.')
-    logging.info(f'{ndone:7d} utts evaluated in total.')
+    logging.info(f'Total {ndone} utts evaluated.')
 
     # corpus level evaluation result
     stats.token_error_rate, stats.modified_token_error_rate = ComputeTokenErrorRate(stats.C, stats.S, stats.I, stats.D)
