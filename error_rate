@@ -91,16 +91,18 @@ def PrettyAlignment(alignment):
             return 2 if (c >= '\u4e00') and (c <= '\u9fa5') else 1
         return sum([ char_width(c) for c in token ])
 
-    H = '  HYP  : '
     R = '  REF  : '
+    H = '  HYP  : '
     E = '  EDIT : '
     for arc in alignment:
-        r, h, e = token_repr(arc.i), token_repr(arc.o), arc.edit if arc.edit != 'C' else ''
+        r, h = token_repr(arc.i), token_repr(arc.o), 
+        e = '' if arc.edit == 'C' else arc.edit  # don't bother showing 'C'
+
         nr, nh, ne = display_width(r), display_width(h), display_width(e)
         n = max(nr, nh, ne) + 1
 
-        H += h + ' ' * (n-nh)
         R += r + ' ' * (n-nr)
+        H += h + ' ' * (n-nh)
         E += e + ' ' * (n-ne)
     return H, R, E
 
