@@ -11,23 +11,11 @@ class LatticeState:
         self.x, self.y = x, y
         self.bp = None  # backpointer
 
-
-def GetEditType(i, o):
-    if not i and o:
-        return 'I'
-    elif i and not o:
-        return 'D'
-    elif i == o:
-        return 'C'
-    elif i != o:
-        return 'S'
-    else:
-        raise RuntimeError
-
 class BackPointer:
-    def __init__(self, x, y, i, o):
-        self.x, self.y, self.i, self.o = x, y, i, o
-        self.edit = GetEditType(i, o)
+    def __init__(self, x, y, i, o, edit):
+        self.x, self.y = x, y
+        self.i, self.o = i, o
+        self.edit = edit
 
 
 def EditDistance(
@@ -56,19 +44,19 @@ def EditDistance(
                 d = S[x-1][y-1].distance + SUB(I[x-1], O[y-1])
                 if d < s.distance:
                     s.distance = d
-                    s.bp = BackPointer(x-1, y-1, I[x-1], O[y-1])
+                    s.bp = BackPointer(x-1, y-1, I[x-1], O[y-1], 'C' if I[x-1] == O[y-1] else 'S')
 
             if x-1 >= 0:
                 d = S[x-1][y].distance + DEL(I[x-1])
                 if d < s.distance:
                     s.distance = d
-                    s.bp = BackPointer(x-1, y, I[x-1], '')
+                    s.bp = BackPointer(x-1, y, I[x-1], '', 'D')
 
             if y-1 >= 0:
                 d = S[x][y-1].distance + INS(O[y-1])
                 if d < s.distance:
                     s.distance = d
-                    s.bp = BackPointer(x, y-1, '', O[y-1])
+                    s.bp = BackPointer(x, y-1, '', O[y-1], 'I')
 
     # Traceback
     # Loop Invariant: traceback head at state s
@@ -95,8 +83,8 @@ def PrettyAlignment(alignment):
     H = '  HYP  : '
     E = '  EDIT : '
     for arc in alignment:
-        r, h = token_repr(arc.i), token_repr(arc.o), 
-        e = '' if arc.edit == 'C' else arc.edit  # don't bother showing 'C'
+        r, h = token_repr(arc.i), token_repr(arc.o)
+        e = '' if arc.edit == 'C' else arc.edit  # don't bother printing 'C'
 
         nr, nh, ne = display_width(r), display_width(h), display_width(e)
         n = max(nr, nh, ne) + 1
