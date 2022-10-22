@@ -253,13 +253,13 @@ if __name__ == '__main__':
             print(*PrettyAlignment(alignment), sep='\n', file=fo)
 
             # NIER
-            K_ref    , _          = InfoED([]                   , wtokenizer(refs[utt]))
-            K_hyp    , _          = InfoED([]                   , wtokenizer(hyps[utt]))
-            K_ref2hyp, alignment1 = InfoED(wtokenizer(refs[utt]), wtokenizer(hyps[utt]))
-            K_hyp2ref, alignment2 = InfoED(wtokenizer(hyps[utt]), wtokenizer(refs[utt]))
+            K_ref, _          = InfoED([]                   , wtokenizer(refs[utt]))
+            K_hyp, _          = InfoED([]                   , wtokenizer(hyps[utt]))
+            K_r2h, alignment1 = InfoED(wtokenizer(refs[utt]), wtokenizer(hyps[utt]))
+            K_h2r, alignment2 = InfoED(wtokenizer(hyps[utt]), wtokenizer(refs[utt]))
 
-            NIER = max(K_ref2hyp, K_hyp2ref) / max(K_ref, K_hyp) * 100
-            print(F'{{ "utt":{utt}, "NIER":{NIER:.2f}, "K(hyp|ref)":{K_ref2hyp:.1f}, "K(ref|hyp)":{K_hyp2ref:.1f}, "K(ref)":{K_ref:.1f}, "K(hyp):":{K_hyp:.1f} }}', file=fo)
+            NIER = max(K_r2h, K_h2r) / max(K_ref, K_hyp) * 100
+            print(F'{{ "utt":{utt}, "NIER":{NIER:.2f}, "K(hyp|ref)":{K_r2h:.1f}, "K(ref|hyp)":{K_h2r:.1f}, "K(ref)":{K_ref:.1f}, "K(hyp):":{K_hyp:.1f} }}', file=fo)
             print(*PrettyAlignment(alignment1), *PrettyAlignment(alignment2), sep='\n', file=fo)
 
             print(F'{{ "utt":{utt}, "CER":{CER:.2f}, "mCER":{mCER:.2f}, "WER":{WER:.2f}, "mWER":{mWER:.2f}, "NIER":{NIER:.2f} }}', file=fo)
