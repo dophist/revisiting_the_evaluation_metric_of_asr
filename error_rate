@@ -42,19 +42,19 @@ def EditDistance(
 
             if x-1 >= 0 and y-1 >= 0:
                 d = S[x-1][y-1].distance + SUB(I[x-1], O[y-1])
-                if d < s.distance:
+                if d <= s.distance:
                     s.distance = d
                     s.bp = BackPointer(x-1, y-1, I[x-1], O[y-1], 'C' if I[x-1] == O[y-1] else 'S')
 
             if x-1 >= 0:
                 d = S[x-1][y].distance + DEL(I[x-1])
-                if d < s.distance:
+                if d <= s.distance:
                     s.distance = d
                     s.bp = BackPointer(x-1, y, I[x-1], '', 'D')
 
             if y-1 >= 0:
                 d = S[x][y-1].distance + INS(O[y-1])
-                if d < s.distance:
+                if d <= s.distance:
                     s.distance = d
                     s.bp = BackPointer(x, y-1, '', O[y-1], 'I')
 
@@ -160,9 +160,10 @@ class EvalStats:
         return summary
 
 
-def LoadKaldiArc(filepath):
+def LoadText(filepath):
     utts = {}
     with open(filepath, 'r', encoding='utf8') as f:
+        # line format (Kaldi's ark): "key text"
         for line in f:
             cols = line.strip().split(maxsplit=1)
             if len(cols) == 1 or len(cols) == 2:
@@ -192,9 +193,9 @@ def GenerateTokenizer(tokenizer_type):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--tokenizer', choices=['whitespace', 'char'], default='whitespace', help='whitespace for WER, char for CER')
-    parser.add_argument('--logk', type=int, default=500 , help='whitespace for WER, char for CER')
-    parser.add_argument('-x', '--ref', type=str, required=True, help='input reference file')
-    parser.add_argument('-y', '--hyp', type=str, required=True, help='input hypothesis file')
+    parser.add_argument('--logk', type=int, default=500 , help='logging interval')
+    parser.add_argument('-x', '--ref', type=str, required=True, help='X|REF text')
+    parser.add_argument('-y', '--hyp', type=str, required=True, help='Y|HYP text')
     parser.add_argument('details', type=str)
     args = parser.parse_args()
     logging.info(args)
@@ -202,8 +203,8 @@ if __name__ == '__main__':
     stats = EvalStats()
 
     logging.info('Loading REF and HYP ...')
-    refs = LoadKaldiArc(args.ref)
-    hyps = LoadKaldiArc(args.hyp)
+    refs = LoadText(args.ref)
+    hyps = LoadText(args.hyp)
 
     # check valid utterances in hyp that have matched non-empty reference
     utts = []
@@ -236,6 +237,7 @@ if __name__ == '__main__':
             )
             c, s, i, d = CountEdits(alignment)
             ter, mter = ComputeTokenErrorRate(c, s, i, d)
+
             # utt-level details
             print(F'{{"utt":{utt}, "distance":{distance}, "TER":{ter:.2f}, "mTER":{mter:.2f}, "cor":{c}, "sub":{s}, "ins":{i}, "del":{d}}}', file=fo)
             print(*PrettyAlignment(alignment), sep='\n', file=fo)
