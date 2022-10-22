@@ -229,7 +229,7 @@ if __name__ == '__main__':
         DEL = lambda T: 1.0,
     )
     InfoED = lambda I, O: EditDistance(I, O,
-        SUB = lambda T1, T2: 0.0 if T1 == T2 else float(len(T2)),
+        SUB = lambda T1, T2: 0.0 if T1 == T2 else float('inf'),
         INS = lambda T: float(len(T)),
         DEL = lambda T: 0.0,
     )
