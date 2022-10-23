@@ -252,58 +252,57 @@ if __name__ == '__main__':
 
     logging.info('Evaluating ...')
     ndone = 0
-    with open(args.details, 'w+', encoding='utf8') as fo:
-        if args.metric == 'TER':
-            LevED = GenerateEditor(args.metric)
-            for utt in utts:
-                distance, alignment = LevED(
-                    tokenizer(refs[utt]),
-                    tokenizer(hyps[utt]),
-                )
+    fo = open(args.details, 'w+', encoding='utf8')
+    if args.metric == 'TER':
+        LevED = GenerateEditor(args.metric)
+        for utt in utts:
+            distance, alignment = LevED(
+                tokenizer(refs[utt]),
+                tokenizer(hyps[utt]),
+            )
 
-                c, s, i, d = CountEdits(alignment)
-                TER, mTER = ComputeTER(c, s, i, d)
+            c, s, i, d = CountEdits(alignment)
+            TER, mTER = ComputeTER(c, s, i, d)
 
-                print(F'{{ "utt":{utt}, "TER":{TER:.2f}, "mTER":{mTER:.2f}, "LevED(ref->hyp)":{distance}, "cor":{c}, "sub":{s}, "ins":{i}, "del":{d} }}', file=fo)
-                print(*PrettyAlignment(alignment), sep='\n', file=fo)
+            print(F'{{ "utt":{utt}, "TER":{TER:.2f}, "mTER":{mTER:.2f}, "LevED(ref->hyp)":{distance}, "cor":{c}, "sub":{s}, "ins":{i}, "del":{d} }}', file=fo)
+            print(*PrettyAlignment(alignment), sep='\n', file=fo)
 
-                stats.C += c
-                stats.S += s
-                stats.I += i
-                stats.D += d
+            stats.C += c
+            stats.S += s
+            stats.I += i
+            stats.D += d
 
-                if TER > 0.0:
-                    stats.utts_with_error += 1
+            if TER > 0.0:
+                stats.utts_with_error += 1
 
-                ndone += 1
-                if ndone % args.logk == 0:
-                    logging.info(f'{ndone:7d} utts evaluated.')
+            ndone += 1
+            if ndone % args.logk == 0:
+                logging.info(f'{ndone:7d} utts evaluated.')
 
-        elif args.metric == 'NID':
-            InfoED = GenerateEditor(args.metric)
-            for utt in utts:
-                K_r2h, alignment1 = InfoED(tokenizer(refs[utt]), tokenizer(hyps[utt]))
-                K_h2r, alignment2 = InfoED(tokenizer(hyps[utt]), tokenizer(refs[utt]))
-                K_ref, _          = InfoED([]                  , tokenizer(refs[utt]))
-                K_hyp, _          = InfoED([]                  , tokenizer(hyps[utt]))
+    elif args.metric == 'NID':
+        InfoED = GenerateEditor(args.metric)
+        for utt in utts:
+            K_r2h, alignment1 = InfoED(tokenizer(refs[utt]), tokenizer(hyps[utt]))
+            K_h2r, alignment2 = InfoED(tokenizer(hyps[utt]), tokenizer(refs[utt]))
+            K_ref, _          = InfoED([]                  , tokenizer(refs[utt]))
+            K_hyp, _          = InfoED([]                  , tokenizer(hyps[utt]))
 
-                NID = ComputeNID(K_r2h, K_h2r, K_ref, K_hyp)
+            NID = ComputeNID(K_r2h, K_h2r, K_ref, K_hyp)
 
-                print(F'{{ "utt":{utt}, "NID":{NID:.2f}, "K(hyp|ref)":{K_r2h:.1f}, "K(ref|hyp)":{K_h2r:.1f}, "K(ref)":{K_ref:.1f}, "K(hyp):":{K_hyp:.1f} }}', file=fo)
-                print(*PrettyAlignment(alignment1), *PrettyAlignment(alignment2), sep='\n', file=fo)
+            print(F'{{ "utt":{utt}, "NID":{NID:.2f}, "K(hyp|ref)":{K_r2h:.1f}, "K(ref|hyp)":{K_h2r:.1f}, "K(ref)":{K_ref:.1f}, "K(hyp):":{K_hyp:.1f} }}', file=fo)
+            print(*PrettyAlignment(alignment1), *PrettyAlignment(alignment2), sep='\n', file=fo)
 
-                stats.K_r2h += K_r2h
-                stats.K_h2r += K_h2r
-                stats.K_ref += K_ref
-                stats.K_hyp += K_hyp
+            stats.K_r2h += K_r2h
+            stats.K_h2r += K_h2r
+            stats.K_ref += K_ref
+            stats.K_hyp += K_hyp
 
-                if NID > 0:
-                    stats.utts_with_error += 1
+            if NID > 0:
+                stats.utts_with_error += 1
 
-                ndone += 1
-                if ndone % args.logk == 0:
-                    logging.info(f'{ndone:7d} utts evaluated.')
-    logging.info(f'Total {ndone} utts evaluated.')
+            ndone += 1
+            if ndone % args.logk == 0:
+                logging.info(f'{ndone:7d} utts evaluated.')
 
     # corpus level evaluation result
     stats.sentence_error_rate = ComputeSentenceErrorRate(stats.utts_with_error, stats.utts)
@@ -315,3 +314,6 @@ if __name__ == '__main__':
 
     #print(stats.to_kaldi())
     print(stats.to_summary())
+
+    fo.close()
+    logging.info(f'Total {ndone} utts evaluated.')
