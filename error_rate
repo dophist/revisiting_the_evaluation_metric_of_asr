@@ -264,7 +264,7 @@ if __name__ == '__main__':
             c, s, i, d = CountEdits(alignment)
             TER, mTER = ComputeTER(c, s, i, d)
 
-            print(F'{{ "utt":{utt}, "TER":{TER:.2f}, "mTER":{mTER:.2f}, "LevED(ref->hyp)":{distance}, "cor":{c}, "sub":{s}, "ins":{i}, "del":{d} }}', file=fo)
+            print(F'{{ "utt":{utt}, "TER":{TER:.2f}, "mTER":{mTER:.2f}, "LevED":{distance}, "cor":{c}, "sub":{s}, "ins":{i}, "del":{d} }}', file=fo)
             print(*PrettyAlignment(alignment), sep='\n', file=fo)
 
             stats.C += c
