@@ -168,24 +168,35 @@ def LoadText(filepath):
                     raise RuntimeError(F'Found duplicated utterence, key={key}')
     return utts
 
-
-def GenerateTokenizer(tokenizer_type):
-    if tokenizer_type == 'whitespace':
-        def word_tokenizer(text):
-            return text.strip().split()
-        tokenizer = word_tokenizer
-    elif tokenizer_type == 'char':
-        def char_tokenizer(text):
-            return [ c for c in text.strip().replace(' ', '') ]
-        tokenizer = char_tokenizer
+def GenerateTokenizer(tokenizer):
+    if   tokenizer == 'word':
+        return lambda text: text.strip().split()
+    elif tokenizer == 'char':
+        return lambda text: [ c for c in text.strip().replace(' ', '') ]
     else:
-        raise RuntimeError
-    return tokenizer
+        raise RuntimeError(F'Unsupported tokenizer type: {tokenizer}')
+
+def GenerateEditor(distance):
+    if distance == 'LevED':
+        return lambda I, O: EditDistance(I, O,
+            SUB = lambda T1, T2: 0.0 if (T1 == T2) else 1.0,
+            INS = lambda T: 1.0,
+            DEL = lambda T: 1.0,
+        )
+    elif distance == 'InfoED':
+        return lambda I, O: EditDistance(I, O,
+            SUB = lambda T1, T2: 0.0 if T1 == T2 else float('inf'),
+            INS = lambda T: float(len(T)),
+            DEL = lambda T: 0.0,
+        )
+    else:
+        raise RuntimeError(F'Unsupported distance type: {distance}')
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--tokenizer', choices=['whitespace', 'char'], default='whitespace', help='whitespace for WER, char for CER')
+    parser.add_argument('--tokenizer', choices=['word', 'char'], default='word', help='word/char')
+    parser.add_argument('--distance', choices=['LevED', 'InfoED'], default='LevED', help='LevED/InfoED')
     parser.add_argument('--logk', type=int, default=500 , help='logging interval')
     parser.add_argument('-x', '--ref', type=str, required=True, help='X/REF text')
     parser.add_argument('-y', '--hyp', type=str, required=True, help='Y/HYP text')
@@ -219,37 +230,37 @@ if __name__ == '__main__':
     logging.info('Generating tokenizer ...')
     #tokenizer = GenerateTokenizer(args.tokenizer)
     #assert(tokenizer)
-    wtokenizer = GenerateTokenizer('whitespace')
+    wtokenizer = GenerateTokenizer('word')
     ctokenizer = GenerateTokenizer('char')
 
-    logging.info('Generating edit-language ...')
-    LevED = lambda I, O: EditDistance(I, O,
-        SUB = lambda T1, T2: 0.0 if (T1 == T2) else 1.0,
-        INS = lambda T: 1.0,
-        DEL = lambda T: 1.0,
-    )
-    InfoED = lambda I, O: EditDistance(I, O,
-        SUB = lambda T1, T2: 0.0 if T1 == T2 else float('inf'),
-        INS = lambda T: float(len(T)),
-        DEL = lambda T: 0.0,
-    )
+    logging.info('Generating editor ...')
+    #editor = GenerateEditor(args.distance)
+    #assert(editor)
+    LevED  = GenerateEditor('LevED')
+    InfoED = GenerateEditor('InfoED')
 
     logging.info('Evaluating ...')
     ndone = 0
     with open(args.details, 'w+', encoding='utf8') as fo:
         for utt in utts:
             # CER & mCER
-            dist, alignment = LevED(ctokenizer(refs[utt]), ctokenizer(hyps[utt]))
+            distance, alignment = LevED(
+                ctokenizer(refs[utt]),
+                ctokenizer(hyps[utt]),
+            )
             c, s, i, d = CountEdits(alignment)
             CER, mCER = ComputeTokenErrorRate(c, s, i, d)
-            print(F'{{ "utt":{utt}, "CER":{CER:.2f}, "mCER":{mCER:.2f}, "LevED(ref->hyp)":{dist}, "cor":{c}, "sub":{s}, "ins":{i}, "del":{d} }}', file=fo)
+            print(F'{{ "utt":{utt}, "CER":{CER:.2f}, "mCER":{mCER:.2f}, "LevED(ref->hyp)":{distance}, "cor":{c}, "sub":{s}, "ins":{i}, "del":{d} }}', file=fo)
             print(*PrettyAlignment(alignment), sep='\n', file=fo)
 
             # WER & mWER
-            dist, alignment = LevED(wtokenizer(refs[utt]), wtokenizer(hyps[utt]))
+            distance, alignment = LevED(
+                wtokenizer(refs[utt]),
+                wtokenizer(hyps[utt]),
+            )
             c, s, i, d = CountEdits(alignment)
             WER, mWER = ComputeTokenErrorRate(c, s, i, d)
-            print(F'{{ "utt":{utt}, "WER":{WER:.2f}, "mWER":{mWER:.2f}, "LevED(ref->hyp)":{dist}, "cor":{c}, "sub":{s}, "ins":{i}, "del":{d} }}', file=fo)
+            print(F'{{ "utt":{utt}, "WER":{WER:.2f}, "mWER":{mWER:.2f}, "LevED(ref->hyp)":{distance}, "cor":{c}, "sub":{s}, "ins":{i}, "del":{d} }}', file=fo)
             print(*PrettyAlignment(alignment), sep='\n', file=fo)
 
             # NIER
