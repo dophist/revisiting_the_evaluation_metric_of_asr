@@ -200,17 +200,16 @@ def GenerateEditor(metric):
             INS = lambda T: 1.0,
             DEL = lambda T: 1.0,
         )
-        editor = LevED
+        return LevED
     elif metric == 'NID':
         InfoED = lambda I, O: EditDistance(I, O,
             SUB = lambda T1, T2: 0.0 if T1 == T2 else float('inf'),
             INS = lambda T: float(len(T)),
             DEL = lambda T: 0.0,
         )
-        editor = InfoED
+        return InfoED
     else:
         raise RuntimeError(F'Unsupported metric: {metric}')
-    return editor
 
 
 if __name__ == '__main__':
@@ -251,16 +250,13 @@ if __name__ == '__main__':
     tokenizer = GenerateTokenizer(args.tokenizer)
     assert(tokenizer)
 
-    logging.info('Generating editor ...')
-    editor = GenerateEditor(args.metric)
-    assert(editor)
-
     logging.info('Evaluating ...')
     ndone = 0
     with open(args.details, 'w+', encoding='utf8') as fo:
-        for utt in utts:
-            if args.metric == 'TER':
-                distance, alignment = editor(
+        if args.metric == 'TER':
+            LevED = GenerateEditor(args.metric)
+            for utt in utts:
+                distance, alignment = LevED(
                     tokenizer(refs[utt]),
                     tokenizer(hyps[utt]),
                 )
@@ -279,11 +275,17 @@ if __name__ == '__main__':
                 if TER > 0.0:
                     stats.utts_with_error += 1
 
-            elif args.metric == 'NID':
-                K_r2h, alignment1 = editor(tokenizer(refs[utt]), tokenizer(hyps[utt]))
-                K_h2r, alignment2 = editor(tokenizer(hyps[utt]), tokenizer(refs[utt]))
-                K_ref, _          = editor([]                  , tokenizer(refs[utt]))
-                K_hyp, _          = editor([]                  , tokenizer(hyps[utt]))
+                ndone += 1
+                if ndone % args.logk == 0:
+                    logging.info(f'{ndone:7d} utts evaluated.')
+
+        elif args.metric == 'NID':
+            InfoED = GenerateEditor(args.metric)
+            for utt in utts:
+                K_r2h, alignment1 = InfoED(tokenizer(refs[utt]), tokenizer(hyps[utt]))
+                K_h2r, alignment2 = InfoED(tokenizer(hyps[utt]), tokenizer(refs[utt]))
+                K_ref, _          = InfoED([]                  , tokenizer(refs[utt]))
+                K_hyp, _          = InfoED([]                  , tokenizer(hyps[utt]))
 
                 NID = ComputeNID(K_r2h, K_h2r, K_ref, K_hyp)
 
@@ -298,12 +300,9 @@ if __name__ == '__main__':
                 if NID > 0:
                     stats.utts_with_error += 1
 
-            else:
-                raise RuntimeError
-
-            ndone += 1
-            if ndone % args.logk == 0:
-                logging.info(f'{ndone:7d} utts evaluated.')
+                ndone += 1
+                if ndone % args.logk == 0:
+                    logging.info(f'{ndone:7d} utts evaluated.')
     logging.info(f'Total {ndone} utts evaluated.')
 
     # corpus level evaluation result
