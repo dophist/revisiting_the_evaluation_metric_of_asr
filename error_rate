@@ -95,14 +95,14 @@ def CountEdits(alignment):
     return (counts['C'], counts['S'], counts['I'], counts['D'])
 
 
-def ComputeTER(c, s, i, d):
+def ComputeTokenErrorRate(c, s, i, d):
     assert((c + s + d) != 0)
     num_edits = (s + d + i)
     ref_len = (c + s + d)
     hyp_len = (c + s + i)
     return 100.0 * num_edits / ref_len, 100.0 * num_edits / max(ref_len, hyp_len)
 
-def ComputeNID(K_r2h, K_h2r, K_ref, K_hyp):
+def ComputeNormalizedInformationDistance(K_r2h, K_h2r, K_ref, K_hyp):
     return 100.0 * max(K_r2h, K_h2r) / max(K_ref, K_hyp)
 
 
@@ -262,7 +262,7 @@ if __name__ == '__main__':
             )
 
             c, s, i, d = CountEdits(alignment)
-            TER, mTER = ComputeTER(c, s, i, d)
+            TER, mTER = ComputeTokenErrorRate(c, s, i, d)
 
             print(F'{{ "utt":{utt}, "TER":{TER:.2f}, "mTER":{mTER:.2f}, "LevED":{distance}, "cor":{c}, "sub":{s}, "ins":{i}, "del":{d} }}', file=fo)
             print(*PrettyAlignment(alignment), sep='\n', file=fo)
@@ -287,7 +287,7 @@ if __name__ == '__main__':
             K_ref, _          = InfoED([]                  , tokenizer(refs[utt]))
             K_hyp, _          = InfoED([]                  , tokenizer(hyps[utt]))
 
-            NID = ComputeNID(K_r2h, K_h2r, K_ref, K_hyp)
+            NID = ComputeNormalizedInformationDistance(K_r2h, K_h2r, K_ref, K_hyp)
 
             print(F'{{ "utt":{utt}, "NID":{NID:.2f}, "K(hyp|ref)":{K_r2h:.1f}, "K(ref|hyp)":{K_h2r:.1f}, "K(ref)":{K_ref:.1f}, "K(hyp):":{K_hyp:.1f} }}', file=fo)
             print(*PrettyAlignment(alignment1), *PrettyAlignment(alignment2), sep='\n', file=fo)
@@ -308,9 +308,9 @@ if __name__ == '__main__':
     stats.sentence_error_rate = ComputeSentenceErrorRate(stats.utts_with_error, stats.utts)
 
     if args.metric == 'TER':
-        stats.token_error_rate, stats.modified_token_error_rate = ComputeTER(stats.C, stats.S, stats.I, stats.D)
+        stats.token_error_rate, stats.modified_token_error_rate = ComputeTokenErrorRate(stats.C, stats.S, stats.I, stats.D)
     elif args.metric == 'NID':
-        stats.normalized_information_distance = ComputeNID(stats.K_r2h, stats.K_h2r, stats.K_ref, stats.K_hyp)
+        stats.normalized_information_distance = ComputeNormalizedInformationDistance(stats.K_r2h, stats.K_h2r, stats.K_ref, stats.K_hyp)
 
     #print(stats.to_kaldi())
     print(stats.to_summary())
