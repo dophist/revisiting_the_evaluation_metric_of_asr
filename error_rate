@@ -152,7 +152,8 @@ class EvalStats:
             F'utts_with_error: {self.utts_with_error}\n'
             F'SER:  {self.sentence_error_rate:.2f}%\n'
             '-------------------- TER -------------------\n'
-            F'tokens: {self.C + self.S + self.D:>7}\n'
+            F'ref tokens: {self.C + self.S + self.D:>7}\n'
+            F'hyp tokens: {self.C + self.S + self.I:>7}\n'
             F'edits:  {self.S + self.I + self.D:>7}\n'
             F'- COR:  {self.C:>7}\n'
             F'- SUB:  {self.S:>7}\n'
@@ -215,7 +216,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--logk', type=int, default=500 , help='logging interval')
     parser.add_argument('-t', '--tokenizer', choices=['word', 'char'], default='word', help='word/char')
-    parser.add_argument('-m', '--metric', choices=['TER', 'NID'], default='TER', help='TER/NID')
+    parser.add_argument('-m', '--metrics', nargs='+', choices=['TER', 'NID'], default=['TER'], help='nargs: TER, NID, ...')
     parser.add_argument('--ref', type=str, required=True, help='REF text')
     parser.add_argument('--hyp', type=str, required=True, help='HYP text')
     parser.add_argument('details', type=str)
@@ -255,54 +256,52 @@ if __name__ == '__main__':
 
     logging.info('Evaluating utterance-level results ...')
     ndone = 0
-    fo = open(args.details, 'w+', encoding='utf8')
-    for utt in utts:
-        if args.metric == 'TER':
-            distance, alignment = LevED(tokenizer(refs[utt]), tokenizer(hyps[utt]))
-            c, s, i, d = CountEdits(alignment)
-            TER, mTER = ComputeTER(c, s, i, d)
+    with open(args.details, 'w+', encoding='utf8') as fo:
+        for utt in utts:
+            if 'TER' in args.metrics:
+                distance, alignment = LevED(tokenizer(refs[utt]), tokenizer(hyps[utt]))
+                c, s, i, d = CountEdits(alignment)
+                TER, mTER = ComputeTER(c, s, i, d)
 
-            print(F'{{ "utt":{utt}, "TER":{TER:.2f}, "mTER":{mTER:.2f}, "LevED":{distance}, "cor":{c}, "sub":{s}, "ins":{i}, "del":{d} }}', file=fo)
-            print(*PrettyAlignment(alignment), sep='\n', file=fo)
+                print(F'{{ "utt":{utt}, "TER":{TER:.2f}, "mTER":{mTER:.2f}, "LevED":{distance}, "cor":{c}, "sub":{s}, "ins":{i}, "del":{d} }}', file=fo)
+                print(*PrettyAlignment(alignment), sep='\n', file=fo)
 
-            stats.C += c
-            stats.S += s
-            stats.I += i
-            stats.D += d
+                stats.C += c
+                stats.S += s
+                stats.I += i
+                stats.D += d
 
-            if TER > 0.0:
+            if 'NID' in args.metrics:
+                K_r2h, alignment1 = InfoED(tokenizer(refs[utt]), tokenizer(hyps[utt]))
+                K_h2r, alignment2 = InfoED(tokenizer(hyps[utt]), tokenizer(refs[utt]))
+                K_ref, _          = InfoED([]                  , tokenizer(refs[utt]))
+                K_hyp, _          = InfoED([]                  , tokenizer(hyps[utt]))
+                NID = ComputeNID(K_r2h, K_h2r, K_ref, K_hyp)
+
+                print(F'{{ "utt":{utt}, "NID":{NID:.2f}, "K(hyp|ref)":{K_r2h:.1f}, "K(ref|hyp)":{K_h2r:.1f}, "K(ref)":{K_ref:.1f}, "K(hyp):":{K_hyp:.1f} }}', file=fo)
+                print(*PrettyAlignment(alignment1), *PrettyAlignment(alignment2), sep='\n', file=fo)
+
+                stats.K_r2h += K_r2h
+                stats.K_h2r += K_h2r
+                stats.K_ref += K_ref
+                stats.K_hyp += K_hyp
+            
+            print('-' * 40, file = fo)
+
+            if locals().get('TER', 0.0) or locals().get('NID', 0.0):
                 stats.utts_with_error += 1
 
-        elif args.metric == 'NID':
-            K_r2h, alignment1 = InfoED(tokenizer(refs[utt]), tokenizer(hyps[utt]))
-            K_h2r, alignment2 = InfoED(tokenizer(hyps[utt]), tokenizer(refs[utt]))
-            K_ref, _          = InfoED([]                  , tokenizer(refs[utt]))
-            K_hyp, _          = InfoED([]                  , tokenizer(hyps[utt]))
-            NID = ComputeNID(K_r2h, K_h2r, K_ref, K_hyp)
-
-            print(F'{{ "utt":{utt}, "NID":{NID:.2f}, "K(hyp|ref)":{K_r2h:.1f}, "K(ref|hyp)":{K_h2r:.1f}, "K(ref)":{K_ref:.1f}, "K(hyp):":{K_hyp:.1f} }}', file=fo)
-            print(*PrettyAlignment(alignment1), *PrettyAlignment(alignment2), sep='\n', file=fo)
-
-            stats.K_r2h += K_r2h
-            stats.K_h2r += K_h2r
-            stats.K_ref += K_ref
-            stats.K_hyp += K_hyp
-
-            if NID > 0:
-                stats.utts_with_error += 1
-
-        ndone += 1
-        if ndone % args.logk == 0:
-            logging.info(f'{ndone:7d} utts evaluated.')
+            ndone += 1
+            if ndone % args.logk == 0:
+                logging.info(f'{ndone:7d} utts evaluated.')
     logging.info(f'Total {ndone} utts evaluated.')
-    fo.close()
 
     logging.info('Evaluating corpus-level results ...')
     stats.sentence_error_rate = ComputeSER(stats.utts_with_error, stats.utts)
 
-    if args.metric == 'TER':
+    if 'TER' in args.metrics:
         stats.token_error_rate, stats.modified_token_error_rate = ComputeTER(stats.C, stats.S, stats.I, stats.D)
-    elif args.metric == 'NID':
+    if 'NID' in args.metrics:
         stats.normalized_information_distance = ComputeNID(stats.K_r2h, stats.K_h2r, stats.K_ref, stats.K_hyp)
 
     #print(stats.to_kaldi())
