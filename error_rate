@@ -286,7 +286,7 @@ if __name__ == '__main__':
                 stats.K_ref += K_ref
                 stats.K_hyp += K_hyp
             
-            print('-' * 40, file = fo)
+            print('-' * 40, file=fo)
 
             if locals().get('TER', 0.0) or locals().get('NID', 0.0):
                 stats.utts_with_error += 1
