@@ -172,10 +172,10 @@ class EvalStats:
         return summary
 
 
-def LoadText(filepath):
+def LoadText(filepath, format = 'KaldiArk'):
+    assert(format == 'KaldiArk') # line format: "key text"
     utts = {}
     with open(filepath, 'r', encoding='utf8') as f:
-        # line format (Kaldi's ark): "key text"
         for line in f:
             cols = line.strip().split(maxsplit=1)
             if len(cols) == 1 or len(cols) == 2:
@@ -244,7 +244,6 @@ if __name__ == '__main__':
 
     stats.hyps = len(hyps)
     stats.refs = len(refs)
-    stats.utts = len(utts)
 
     logging.info('Generating tokenizer ...')
     tokenizer = GenerateTokenizer(args.tokenizer)
@@ -255,7 +254,6 @@ if __name__ == '__main__':
     InfoED = GenerateDistanceComputer('InfoED')
 
     logging.info('Evaluating utterance-level results ...')
-    ndone = 0
     with open(args.details, 'w+', encoding='utf8') as fo:
         for utt in utts:
             if 'TER' in args.metrics:
@@ -290,11 +288,10 @@ if __name__ == '__main__':
 
             if locals().get('TER', 0.0) or locals().get('NID', 0.0):
                 stats.utts_with_error += 1
-
-            ndone += 1
-            if ndone % args.logk == 0:
-                logging.info(f'{ndone:7d} utts evaluated.')
-    logging.info(f'Total {ndone} utts evaluated.')
+            stats.utts += 1
+            if stats.utts % args.logk == 0:
+                logging.info(f'{stats.utts:7d} utts evaluated.')
+    logging.info(f'Total {stats.utts} utts evaluated.')
 
     logging.info('Evaluating corpus-level results ...')
     stats.sentence_error_rate = ComputeSER(stats.utts_with_error, stats.utts)
