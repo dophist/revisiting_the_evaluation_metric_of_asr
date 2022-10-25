@@ -286,7 +286,7 @@ if __name__ == '__main__':
             
             print('-' * 40, file=fo)
 
-            if locals().get('TER', 0.0) or locals().get('NID', 0.0):
+            if locals().get('TER') or locals().get('NID'):
                 stats.utts_with_error += 1
             stats.utts += 1
 
