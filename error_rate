@@ -5,10 +5,37 @@
 import sys, argparse, json, logging
 logging.basicConfig(stream=sys.stderr, level=logging.INFO, format='[%(levelname)s] %(message)s')
 
+
+class LanguageModel:
+    def __init__(self):
+        self.model = None
+
+    def BosState(self):
+        if self.model:
+            return None # TODO
+        else:
+            return None
+
+    def LmScore(self, istate, token):
+        if self.model:
+            return None, None # TODO
+        else:
+            score  = float(len(token))
+            ostate = istate
+            return score, ostate
+
+
+# For Input I and Output O, a search lattice S of size (X * Y),
+# indexing system:
+#   x-axis step:   { S[x][y] } token:I[x] { S[x+1][y] }
+#   y-axis step:   { S[x][y] } token:O[y] { S[x][y+1] }
 class LatticeState:
     def __init__(self, x, y):
         self.distance = float('inf')
+
         self.x, self.y = x, y
+        self.lm_state = None
+
         self.bp = None  # backpointer
 
 class BackPointer:
@@ -18,11 +45,13 @@ class BackPointer:
         self.edit = edit
 
 
-def EditDistance(I, O, SUB, INS, DEL):
-    # For Input I and Output O, a search lattice S of size (X * Y),
-    # indexing system:
-    #   x-axis step:   { S[x][y] } token:I[x] { S[x+1][y] }
-    #   y-axis step:   { S[x][y] } token:O[y] { S[x][y+1] }
+def LevED(
+    I,
+    O,
+    SUB = lambda T1, T2: 0.0 if (T1 == T2) else 1.0,
+    INS = lambda T: 1.0,
+    DEL = lambda T: 1.0,
+):
     X = len(I) + 1
     Y = len(O) + 1
     S = [ [ LatticeState(x, y) for y in range(Y) ] for x in range(X) ]
@@ -35,19 +64,19 @@ def EditDistance(I, O, SUB, INS, DEL):
 
             if x-1 >= 0 and y-1 >= 0:
                 d = S[x-1][y-1].distance + SUB(I[x-1], O[y-1])
-                if d <= s.distance:
+                if d < s.distance:
                     s.distance = d
                     s.bp = BackPointer(x-1, y-1, I[x-1], O[y-1], 'C' if I[x-1] == O[y-1] else 'S')
 
             if x-1 >= 0:
                 d = S[x-1][y].distance + DEL(I[x-1])
-                if d <= s.distance:
+                if d < s.distance:
                     s.distance = d
                     s.bp = BackPointer(x-1, y, I[x-1], '', 'D')
 
             if y-1 >= 0:
                 d = S[x][y-1].distance + INS(O[y-1])
-                if d <= s.distance:
+                if d < s.distance:
                     s.distance = d
                     s.bp = BackPointer(x, y-1, '', O[y-1], 'I')
 
@@ -61,6 +90,81 @@ def EditDistance(I, O, SUB, INS, DEL):
         s = S[s.bp.x][s.bp.y]
     alignment.reverse()
     return (S[-1][-1].distance, alignment)
+
+
+def InfoED(I, O, lm = LanguageModel()):
+    SUB = lambda T_i, T_o: 0.0 if T_i == T_o else float('inf')
+    DEL = lambda T: 0.0
+
+    LengthRepr = lambda length: F':{length:.1f}' if length else ''
+
+    X = len(I) + 1
+    Y = len(O) + 1
+    S = [ [ LatticeState(x, y) for y in range(Y) ] for x in range(X) ]
+
+    # Init origin
+    S[0][0].distance = 0.0
+    S[0][0].lm_state = lm.BosState()
+
+    # Init Y axis
+    INS_length = [0.0]  * len(O)  # This caches the lengths of tokens on output tape
+    for y in range(1, Y):
+        # INS from S(0, y-1)  -- O[y-1] -->  S(0, y)
+        src = S[0][y-1]
+        dst = S[0][y]
+
+        lm_score, next_lm_state = lm.LmScore(src.lm_state, O[y-1])
+
+        l = lm_score # TODO: conversion from LM score to information bits
+        INS_length[y-1] = l
+
+        dst.distance = src.distance + l
+        dst.lm_state = next_lm_state
+        dst.bp = BackPointer(0, y-1, '', O[y-1], F'I{LengthRepr(l)}')
+
+
+    # Fill lattice states
+    for x in range(1, X):
+        for y in range(Y):
+            s = S[x][y]
+
+            if x-1 >= 0 and y-1 >= 0:
+                # SUB from S(x-1, y-1)  -- I[x-1], O[y-1] -->  S(x, y)
+                l = SUB(I[x-1], O[y-1])
+                d = S[x-1][y-1].distance + l
+                if d < s.distance:
+                    s.distance = d
+                    s.lm_state = S[0][y].lm_state
+                    s.bp = BackPointer(x-1, y-1, I[x-1], O[y-1], 'C' if I[x-1] == O[y-1] else F'S{LengthRepr(l)}')
+
+            if x-1 >= 0:
+                # DEL from S(x-1, y)  -- I[x-1] -->  S(x, y)
+                l = DEL(I[x-1])
+                d = S[x-1][y].distance + l
+                if d < s.distance:
+                    s.distance = d
+                    s.lm_state = S[x-1][y].lm_state
+                    s.bp = BackPointer(x-1, y, I[x-1], '', F'D{LengthRepr(l)}')
+
+            if y-1 >= 0:
+                # INS from S(x, y-1)  -- O[y-1] -->  S(x, y)
+                l = INS_length[y-1]
+                d = S[x][y-1].distance + l
+                if d < s.distance:
+                    s.distance = d
+                    s.lm_state = S[0][y].lm_state
+                    s.bp = BackPointer(x, y-1, '', O[y-1], F'I{LengthRepr(l)}')
+
+    # Traceback
+    # Loop Invariant: traceback head at state s
+    # Termination: s reaches origin
+    alignment = []
+    s = S[-1][-1]
+    while s.bp:
+        alignment.append(s.bp)
+        s = S[s.bp.x][s.bp.y]
+    alignment.reverse()
+    return (S[-1][-1].distance, S[0][-1].distance, alignment)
 
 
 def PrettyAlignment(alignment):
@@ -195,22 +299,6 @@ def GenerateTokenizer(tokenizer):
     else:
         raise RuntimeError(F'Unsupported tokenizer type: {tokenizer}')
 
-def GenerateDistanceComputer(distance):
-    if distance == 'LevED':
-        return lambda I, O: EditDistance(I, O,
-            SUB = lambda T1, T2: 0.0 if (T1 == T2) else 1.0,
-            INS = lambda T: 1.0,
-            DEL = lambda T: 1.0,
-        )
-    elif distance == 'InfoED':
-        return lambda I, O: EditDistance(I, O,
-            SUB = lambda T1, T2: 0.0 if T1 == T2 else float('inf'),
-            INS = lambda T: float(len(T)),
-            DEL = lambda T: 0.0,
-        )
-    else:
-        raise RuntimeError(F'Unsupported distance type: {distance}')
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -249,10 +337,6 @@ if __name__ == '__main__':
     tokenizer = GenerateTokenizer(args.tokenizer)
     assert(tokenizer)
 
-    logging.info('Generating distance computer...')
-    LevED  = GenerateDistanceComputer('LevED')
-    InfoED = GenerateDistanceComputer('InfoED')
-
     logging.info('Evaluating utterance-level results ...')
     with open(args.details, 'w+', encoding='utf8') as fo:
         for utt in utts:
@@ -271,10 +355,8 @@ if __name__ == '__main__':
                 print(*PrettyAlignment(alignment), sep='\n', file=fo)
 
             if 'NID' in args.metrics:
-                K_r2h, alignment1 = InfoED(tokenizer(refs[utt]), tokenizer(hyps[utt]))
-                K_h2r, alignment2 = InfoED(tokenizer(hyps[utt]), tokenizer(refs[utt]))
-                K_ref, _          = InfoED([]                  , tokenizer(refs[utt]))
-                K_hyp, _          = InfoED([]                  , tokenizer(hyps[utt]))
+                K_r2h, K_hyp, alignment1 = InfoED(tokenizer(refs[utt]), tokenizer(hyps[utt]))
+                K_h2r, K_ref, alignment2 = InfoED(tokenizer(hyps[utt]), tokenizer(refs[utt]))
 
                 stats.K_r2h += K_r2h
                 stats.K_h2r += K_h2r

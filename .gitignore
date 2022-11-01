@@ -1,6 +1,7 @@
+data/wikitext-103
+data/google_ngram
+paper_example
 NCD/*
-google_ngram
-einstein
 DETAILS*
 RESULTS*
 tmp.*
