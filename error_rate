@@ -5,28 +5,33 @@
 import sys, argparse, json, logging
 logging.basicConfig(stream=sys.stderr, level=logging.INFO, format='[%(levelname)s] %(message)s')
 
+import kenlm  # pip install https://github.com/kpu/kenlm/archive/master.zip
+
 
 class LanguageModel:
-    def __init__(self):
-        self.model = None
+    def __init__(self, path):
+        assert(path)
+        self.model = kenlm.LanguageModel(path)
 
     def BosState(self):
-        if self.model:
-            return None # TODO
-        else:
-            return None
+        assert(self.model)
+
+        bos = kenlm.State()
+        self.model.BeginSentenceWrite(bos)
+        return bos
 
     def LmScore(self, istate, token):
-        if self.model:
-            return None, None # TODO
-        else:
-            score  = float(len(token))
-            ostate = istate
-            return score, ostate
+        assert(self.model)
+
+        ostate = kenlm.State()
+        score = self.model.BaseScore(istate, token, ostate)
+        return score, ostate
 
 
-# For Input I and Output O, a search lattice S of size (X * Y),
-# indexing system:
+# For Input-tape I and Output-tape O, and a search lattice S of size (X * Y), where:
+#    X, Y are state-indexes, tokens on tapes are arcs
+#
+# corresponding indexing system:
 #   x-axis step:   { S[x][y] } token:I[x] { S[x+1][y] }
 #   y-axis step:   { S[x][y] } token:O[y] { S[x][y+1] }
 class LatticeState:
@@ -92,7 +97,7 @@ def LevED(
     return (S[-1][-1].distance, alignment)
 
 
-def InfoED(I, O, lm = LanguageModel()):
+def InfoED(I, O, lm):
     SUB = lambda T_i, T_o: 0.0 if T_i == T_o else float('inf')
     DEL = lambda T: 0.0
 
@@ -113,7 +118,10 @@ def InfoED(I, O, lm = LanguageModel()):
 
         lm_score, lm_state = lm.LmScore(prev_s.lm_state, O[y-1])
 
-        l = lm_score # TODO: conversion from LM score to information length in bits
+        # KenLM returns log_10(prob), we need -log_2(prob) in theory.
+        # But since these lengths are used in ratio in the end, 
+        # there is no need to convert, except the sign (score -> distance).
+        l = -lm_score  
         INS_cache[y-1] = l
 
         s.distance, s.lm_state = prev_s.distance + l, lm_state
@@ -300,6 +308,7 @@ if __name__ == '__main__':
     parser.add_argument('--logk', type=int, default=500 , help='logging interval')
     parser.add_argument('-t', '--tokenizer', choices=['word', 'char'], default='word', help='word/char')
     parser.add_argument('-m', '--metrics', nargs='+', choices=['TER', 'NID'], default=['TER'], help='nargs: TER, NID, ...')
+    parser.add_argument('--lm', type=str, help='Language prior used in NID')
     parser.add_argument('--ref', type=str, required=True, help='REF text')
     parser.add_argument('--hyp', type=str, required=True, help='HYP text')
     parser.add_argument('details', type=str)
@@ -332,6 +341,10 @@ if __name__ == '__main__':
     tokenizer = GenerateTokenizer(args.tokenizer)
     assert(tokenizer)
 
+    if args.lm:
+        logging.info('Loading language model ...')
+        lm = LanguageModel(args.lm)
+
     logging.info('Evaluating utterance-level results ...')
     with open(args.details, 'w+', encoding='utf8') as fo:
         for utt in utts:
@@ -348,10 +361,13 @@ if __name__ == '__main__':
 
                 print(F'{{ "utt":{utt}, "TER":{TER:.2f}, "mTER":{mTER:.2f}, "LevED":{distance}, "cor":{c}, "sub":{s}, "ins":{i}, "del":{d} }}', file=fo)
                 print(*PrettyAlignment(alignment), sep='\n', file=fo)
+                print('='* 50, file=fo)
 
             if 'NID' in args.metrics:
-                K_r2h, K_hyp, alignment1 = InfoED(tokenizer(refs[utt]), tokenizer(hyps[utt]))
-                K_h2r, K_ref, alignment2 = InfoED(tokenizer(hyps[utt]), tokenizer(refs[utt]))
+                assert(lm)
+
+                K_r2h, K_hyp, alignment1 = InfoED(tokenizer(refs[utt]), tokenizer(hyps[utt]), lm)
+                K_h2r, K_ref, alignment2 = InfoED(tokenizer(hyps[utt]), tokenizer(refs[utt]), lm)
 
                 stats.K_r2h += K_r2h
                 stats.K_h2r += K_h2r
@@ -360,10 +376,20 @@ if __name__ == '__main__':
 
                 NID = ComputeNID(K_r2h, K_h2r, K_ref, K_hyp)
 
-                print(F'{{ "utt":{utt}, "NID":{NID:.2f}, "K(hyp|ref)":{K_r2h:.1f}, "K(ref|hyp)":{K_h2r:.1f}, "K(ref)":{K_ref:.1f}, "K(hyp):":{K_hyp:.1f} }}', file=fo)
-                print(*PrettyAlignment(alignment1), *PrettyAlignment(alignment2), sep='\n', file=fo)
+                # following two alignments are for debugging purpose
+                _, _, alignment3 = InfoED([], tokenizer(refs[utt]), lm)
+                _, _, alignment4 = InfoED([], tokenizer(hyps[utt]), lm)
 
-            print('-' * 40, file=fo)
+                print(F'{{ "utt":{utt}, "NID":{NID:.2f}, "K(hyp|ref)":{K_r2h:.1f}, "K(ref|hyp)":{K_h2r:.1f}, "K(ref)":{K_ref:.1f}, "K(hyp):":{K_hyp:.1f} }}', file=fo)
+                print(
+                    *PrettyAlignment(alignment1), '-' * 25,
+                    *PrettyAlignment(alignment2), '-' * 25,
+                    *PrettyAlignment(alignment3), '-' * 25,
+                    *PrettyAlignment(alignment4), '-' * 25,
+                    sep='\n', file=fo,
+                )
+
+            print('*' * 75, file=fo)
 
             if locals().get('TER') or locals().get('NID'):
                 stats.utts_with_error += 1
