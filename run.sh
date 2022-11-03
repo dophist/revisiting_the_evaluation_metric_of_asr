@@ -7,3 +7,6 @@ if [[ ! -f lm/ngram/2gram.trie ]]; then
 fi
 
 ./error_rate  -m TER NID  --lm lm/ngram/2gram.trie  --ref ref.txt  --hyp hyp.txt  DETAILS.txt | tee RESULTS.txt
+
+## run examples in paper
+#./error_rate  -m TER  --ref data/paper/ref.txt  --hyp data/paper/hyp.txt  tmp.txt
