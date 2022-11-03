@@ -361,7 +361,7 @@ if __name__ == '__main__':
 
                 print(F'{{ "utt":{utt}, "TER":{TER:.2f}, "mTER":{mTER:.2f}, "LevED":{distance}, "cor":{c}, "sub":{s}, "ins":{i}, "del":{d} }}', file=fo)
                 print(*PrettyAlignment(alignment), sep='\n', file=fo)
-                print('='* 50, file=fo)
+                print('-'* 35, file=fo)
 
             if 'NID' in args.metrics:
                 assert(lm)
@@ -382,14 +382,14 @@ if __name__ == '__main__':
 
                 print(F'{{ "utt":{utt}, "NID":{NID:.2f}, "K(hyp|ref)":{K_r2h:.1f}, "K(ref|hyp)":{K_h2r:.1f}, "K(ref)":{K_ref:.1f}, "K(hyp):":{K_hyp:.1f} }}', file=fo)
                 print(
-                    *PrettyAlignment(alignment1), '-' * 25,
-                    *PrettyAlignment(alignment2), '-' * 25,
-                    *PrettyAlignment(alignment3), '-' * 25,
-                    *PrettyAlignment(alignment4), '-' * 25,
+                    *PrettyAlignment(alignment1), '',
+                    *PrettyAlignment(alignment2), '',
+                    *PrettyAlignment(alignment3), '',
+                    *PrettyAlignment(alignment4),
                     sep='\n', file=fo,
                 )
 
-            print('*' * 75, file=fo)
+            print('=' * 70, file=fo)
 
             if locals().get('TER') or locals().get('NID'):
                 stats.utts_with_error += 1
