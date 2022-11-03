@@ -1,8 +1,8 @@
 # To install KenLM training tool, follow https://github.com/kpu/kenlm
 
-text=lm/text.txt
-arpa=lm/2gram.arpa
-trie=lm/2gram.trie
+text=text.txt
+arpa=2gram.arpa
+trie=2gram.trie
 
 # Train ARPA
 cat $text | lmplz -o 2 > $arpa
