@@ -1,7 +1,9 @@
 data/wikitext-103*
 data/google_ngram
 data/paper
-lm
+lm/*.arpa
+lm/*.trie
+lm/*.txt
 paper_example
 NCD/*
 DETAILS*
