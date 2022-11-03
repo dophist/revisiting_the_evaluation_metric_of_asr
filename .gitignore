@@ -1,9 +1,12 @@
 data/wikitext-103*
 data/google_ngram
-lm/*.arpa
-lm/*.trie
+
 lm/*.txt
+lm/ngram/*.arpa
+lm/ngram/*.trie
+
 NCD/*
+
 DETAILS*
 RESULTS*
 tmp.*
