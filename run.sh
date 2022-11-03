@@ -6,4 +6,4 @@ if [[ ! -f lm/ngram/2gram.trie ]]; then
 	echo "Language model downloaded."
 fi
 
-./error_rate  -m TER NID  --lm lm/ngram/2gram.trie  --ref data/ref.txt  --hyp data/hyp.txt  DETAILS.txt | tee RESULTS.txt
+./error_rate  -m TER NID  --lm lm/ngram/2gram.trie  --ref ref.txt  --hyp hyp.txt  DETAILS.txt | tee RESULTS.txt
