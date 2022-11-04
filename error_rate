@@ -311,7 +311,7 @@ if __name__ == '__main__':
     parser.add_argument('--logk', type=int, default=500 , help='logging interval')
     parser.add_argument('-t', '--tokenizer', type=str, default='word', help='word/char/sentencepiece_model_path')
     parser.add_argument('-m', '--metrics', nargs='+', choices=['TER', 'NID'], default=['TER'], help='nargs: TER, NID, ...')
-    parser.add_argument('--lm', type=str, help='Language prior used in NID')
+    parser.add_argument('-l', '--lm', type=str, help='Language prior used in NID')
     parser.add_argument('--ref', type=str, required=True, help='REF text')
     parser.add_argument('--hyp', type=str, required=True, help='HYP text')
     parser.add_argument('details', type=str)
