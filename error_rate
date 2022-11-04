@@ -400,15 +400,16 @@ if __name__ == '__main__':
 
             if stats.utts % args.logk == 0:
                 logging.info(f'{stats.utts:7d} utts evaluated.')
+        logging.info('Evaluating corpus-level results ...')
+        stats.sentence_error_rate = ComputeSER(stats.utts_with_error, stats.utts)
+
+        if 'TER' in args.metrics:
+            stats.token_error_rate, stats.modified_token_error_rate = ComputeTER(stats.C, stats.S, stats.I, stats.D)
+        if 'NID' in args.metrics:
+            stats.normalized_information_distance = ComputeNID(stats.K_r2h, stats.K_h2r, stats.K_ref, stats.K_hyp)
+
+        print(stats.to_summary(), file=fo)
     logging.info(f'Total {stats.utts} utts evaluated.')
-
-    logging.info('Evaluating corpus-level results ...')
-    stats.sentence_error_rate = ComputeSER(stats.utts_with_error, stats.utts)
-
-    if 'TER' in args.metrics:
-        stats.token_error_rate, stats.modified_token_error_rate = ComputeTER(stats.C, stats.S, stats.I, stats.D)
-    if 'NID' in args.metrics:
-        stats.normalized_information_distance = ComputeNID(stats.K_r2h, stats.K_h2r, stats.K_ref, stats.K_hyp)
 
     #print(stats.to_kaldi())
     print(stats.to_summary())
