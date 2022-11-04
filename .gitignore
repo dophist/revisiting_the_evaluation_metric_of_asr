@@ -2,9 +2,9 @@ data/wikitext-103*
 data/google_ngram
 data/gigaspeech
 
-lm/*.txt
-lm/ngram/*.arpa
-lm/ngram/*.trie
+*.txt
+*.arpa
+*.trie
 
 NCD/*
 
