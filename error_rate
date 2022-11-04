@@ -6,6 +6,7 @@ import sys, argparse, json, logging
 logging.basicConfig(stream=sys.stderr, level=logging.INFO, format='[%(levelname)s] %(message)s')
 
 import kenlm  # pip install https://github.com/kpu/kenlm/archive/master.zip
+import sentencepiece as spm  # pip install sentencepiece
 
 
 class LanguageModel:
@@ -300,13 +301,15 @@ def GenerateTokenizer(tokenizer):
     elif tokenizer == 'char':
         return lambda text: [ c for c in text.strip().replace(' ', '') ]
     else:
-        raise RuntimeError(F'Unsupported tokenizer type: {tokenizer}')
+        model = spm.SentencePieceProcessor()
+        model.load(tokenizer)
+        return lambda text: model.EncodeAsPieces(text.strip())
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--logk', type=int, default=500 , help='logging interval')
-    parser.add_argument('-t', '--tokenizer', choices=['word', 'char'], default='word', help='word/char')
+    parser.add_argument('-t', '--tokenizer', type=str, default='word', help='word/char/sentencepiece_model_path')
     parser.add_argument('-m', '--metrics', nargs='+', choices=['TER', 'NID'], default=['TER'], help='nargs: TER, NID, ...')
     parser.add_argument('--lm', type=str, help='Language prior used in NID')
     parser.add_argument('--ref', type=str, required=True, help='REF text')

@@ -2,7 +2,7 @@ sentencepiece:
     # https://github.com/google/sentencepiece/blob/master/doc/options.md
     model_type: unigram # ["unigram", "bpe", "char"]
     vocab_size: 1024
-    character_coverage: 0.99
+    character_coverage: 0.995
     user_defined_symbols: "" # comma seperated symbols
     pad_id: 0
     bos_id: 1
