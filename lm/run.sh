@@ -1,14 +1,11 @@
 #!/usr/bin/env bash
 
+sh download_text.sh
+
 tn.py
 
-cd tokenizer
-sh train_tokenizer.sh
-cd -
+python ops/tokenizer_train.py -c tokenizer.yaml -i text.txt.tn -o tokenizer
+python ops/tokenizer.py -x encode -m tokenizer.model -i text.txt.tn -o text.txt.tn.tokenize
 
-python tokenizer/op_tokenizer.py -x encode -m tokenizer/tokenizer.model -i text.txt -o tokenized.text.txt
-
-cd ngram
 sh train_ngram.sh
-cd -
 

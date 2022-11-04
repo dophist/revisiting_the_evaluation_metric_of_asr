@@ -1,9 +1,8 @@
 # To install KenLM training tool, follow https://github.com/kpu/kenlm
-
-text=../tokenized.text.txt
-arpa=ngram.arpa
-trie=ngram.trie
-order=6
+text=text.txt.tn.tokenize
+order=4
+arpa=${order}gram.arpa
+trie=${order}gram.trie
 
 # Train ARPA
 cat $text | lmplz -o $order > $arpa
