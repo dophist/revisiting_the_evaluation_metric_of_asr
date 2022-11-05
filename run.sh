@@ -8,8 +8,8 @@
 #wget  https://swaphub.oss-cn-hangzhou.aliyuncs.com/asr_metric_assets/ngram_subword1024/6gram.trie -O lm/ngram_subword1024/6gram.trie
 ##echo "Language model downloaded."
 
-ref=data/gigaspeech/ref.txt
-hyp=data/gigaspeech/hyp.txt
+ref=ref.txt
+hyp=hyp.txt
 
 lm=lm/ngram_subword256/6gram.trie
 tokenizer=lm/tokenizer256/tokenizer.model
