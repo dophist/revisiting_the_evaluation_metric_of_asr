@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 
-if [[ ! -f lm/4gram.trie ]]; then
-    echo "Downloading language model for ASR evaluation ..."
-    #wget  https://swaphub.oss-cn-hangzhou.aliyuncs.com/asr_metric_assets/2gram_word.trie -O lm/2gram_word.trie
-    wget  https://swaphub.oss-cn-hangzhou.aliyuncs.com/asr_metric_assets/4gram.trie -O lm/4gram.trie
-    #wget  https://swaphub.oss-cn-hangzhou.aliyuncs.com/asr_metric_assets/6gram.trie -O lm/6gram.trie
-    echo "Language model downloaded."
-fi
+##echo "Downloading language model for ASR evaluation ..."
+#wget  https://swaphub.oss-cn-hangzhou.aliyuncs.com/asr_metric_assets/ngram_word/2gram.trie        -O lm/ngram_word/2gram.trie
+#wget  https://swaphub.oss-cn-hangzhou.aliyuncs.com/asr_metric_assets/ngram_subword256/4gram.trie  -O lm/ngram_subword256/4gram.trie
+#wget  https://swaphub.oss-cn-hangzhou.aliyuncs.com/asr_metric_assets/ngram_subword256/6gram.trie  -O lm/ngram_subword256/6gram.trie
+#wget  https://swaphub.oss-cn-hangzhou.aliyuncs.com/asr_metric_assets/ngram_subword1024/4gram.trie -O lm/ngram_subword1024/4gram.trie
+#wget  https://swaphub.oss-cn-hangzhou.aliyuncs.com/asr_metric_assets/ngram_subword1024/6gram.trie -O lm/ngram_subword1024/6gram.trie
+##echo "Language model downloaded."
 
-ref=ref.txt
-hyp=hyp.txt
+ref=data/gigaspeech/ref.txt
+hyp=data/gigaspeech/hyp.txt
 
-lm=lm/4gram.trie
-tokenizer=lm/tokenizer.model
+lm=lm/ngram_subword256/6gram.trie
+tokenizer=lm/tokenizer256/tokenizer.model
 
 # word-token TER & mTER
 ./error_rate  -m TER  --ref $ref  --hyp $hyp  DETAILS0.txt | tee RESULTS0.txt
