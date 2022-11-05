@@ -5,6 +5,7 @@
 import sys, argparse, json, logging
 logging.basicConfig(stream=sys.stderr, level=logging.INFO, format='[%(levelname)s] %(message)s')
 
+import math
 import kenlm  # pip install https://github.com/kpu/kenlm/archive/master.zip
 import sentencepiece as spm  # pip install sentencepiece
 
@@ -119,10 +120,8 @@ def InfoED(I, O, lm):
 
         lm_score, lm_state = lm.LmScore(prev_s.lm_state, O[y-1])
 
-        # KenLM returns log_10(prob), we need -log_2(prob) in theory.
-        # But since these lengths are used in ratio in the end, 
-        # there is no need to convert, except the sign (score -> distance).
-        l = -lm_score  
+        # KenLM returns log_10(prob), we need -log_2(prob) as "distance" in bits
+        l = - lm_score * math.log(10,2)
         INS_cache[y-1] = l
 
         s.distance, s.lm_state = prev_s.distance + l, lm_state
