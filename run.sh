@@ -10,16 +10,17 @@ if [[ ! -f lm/tokenizer.model ]]; then
     cd -
 fi
 
-ref=ref.txt
-hyp=hyp.txt
-
 lm=lm/256_4gram.trie
 tokenizer=lm/tokenizer.model
 
-# word-token TER & mTER
-./error_rate  -m TER  --ref $ref  --hyp $hyp  DETAILS0.txt | tee RESULTS0.txt
+ref=ref.txt
+hyp=hyp.txt
 
-# subword-token NIER
+
+# word-level TER & mTER
+./error_rate  -m TER  -t word  --ref $ref  --hyp $hyp  DETAILS0.txt | tee RESULTS0.txt
+
+# subword-level TER & mTER & NIER
 ./error_rate  -m TER NID  -t $tokenizer  --lm $lm  --ref $ref  --hyp $hyp  DETAILS1.txt | tee RESULTS1.txt
 
 ## run examples in paper
