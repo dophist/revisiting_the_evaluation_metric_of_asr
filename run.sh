@@ -8,12 +8,17 @@ if [[ ! -f lm/4gram.trie ]]; then
     echo "Language model downloaded."
 fi
 
+ref=ref.txt
+hyp=hyp.txt
+
+lm=lm/4gram.trie
+tokenizer=lm/tokenizer.model
 
 # word-token TER & mTER
-./error_rate  -m TER  --ref ref.txt  --hyp hyp.txt  DETAILS0.txt | tee RESULTS0.txt
+./error_rate  -m TER  --ref $ref  --hyp $hyp  DETAILS0.txt | tee RESULTS0.txt
 
 # subword-token NIER
-./error_rate  -m TER NID  -t lm/tokenizer.model  --lm lm/4gram.trie  --ref ref.txt  --hyp hyp.txt  DETAILS1.txt | tee RESULTS1.txt
+./error_rate  -m TER NID  -t $tokenizer  --lm $lm  --ref $ref  --hyp $hyp  DETAILS1.txt | tee RESULTS1.txt
 
 ## run examples in paper
 #./error_rate  -m TER  --ref data/paper/ref.txt  --hyp data/paper/hyp.txt  tmp.txt
