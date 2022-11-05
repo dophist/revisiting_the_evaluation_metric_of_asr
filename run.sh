@@ -15,7 +15,7 @@ lm=lm/ngram_subword256/6gram.trie
 tokenizer=lm/tokenizer256/tokenizer.model
 
 # word-token TER & mTER
-./error_rate  -m TER  --ref $ref  --hyp $hyp  DETAILS0.txt | tee RESULTS0.txt
+./error_rate  -m TER  -t word  --ref $ref  --hyp $hyp  DETAILS0.txt | tee RESULTS0.txt
 
 # subword-token NIER
 ./error_rate  -m TER NID  -t $tokenizer  --lm $lm  --ref $ref  --hyp $hyp  DETAILS1.txt | tee RESULTS1.txt
