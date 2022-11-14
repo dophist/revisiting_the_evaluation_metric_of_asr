@@ -17,19 +17,17 @@ fi
 lm=lm/256_4gram.trie
 tokenizer=lm/tokenizer.model
 
-#ref=ref.txt
-#hyp=hyp.txt
-ref=data/gigaspeech/ref.txt
-hyp=data/gigaspeech/hyp.txt
+ref=ref.txt
+hyp=hyp.txt
 
 
-# word-level TER & mTER
+# word-level TER/mTER
 ./error_rate  -m TER  -t word  --ref $ref  --hyp $hyp  DETAILS0.txt | tee RESULTS0.txt
 
-# subword-level TER & mTER & NIER
+# subword-level TER/mTER & NID
 ./error_rate  -m TER NID  -t $tokenizer  --lm $lm  --ref $ref  --hyp $hyp  DETAILS1.txt | tee RESULTS1.txt
 
-# subword-level TER & mTER & NIER
+# subword-level TER/mTER & NID
 ./error_rate  -m TER NID  -t word  --codec codec/word_count.tsv  --ref $ref  --hyp $hyp  DETAILS2.txt | tee RESULTS2.txt
 
 ## run examples in paper
