@@ -31,7 +31,7 @@ class LanguageModel:
         return score, ostate
 
 
-class HuffmanEncoder:
+class Codec:
     def __init__(self, path):
         word_counts = {}
         with open(path, 'r') as f:
@@ -68,10 +68,10 @@ class LatticeState:
         self.bp = None  # backpointer
 
 class BackPointer:
-    def __init__(self, x, y, i, o, edit_type, edit_length = 0.0):
+    def __init__(self, x, y, i, o, edit_type, length):
         self.x, self.y = x, y
         self.i, self.o = i, o
-        self.edit = edit_type + (F':{edit_length:.1f}' if edit_length else '')
+        self.edit = edit_type + ':' + (F'{length:.1f}' if isinstance(length, float) else str(length))
 
 
 def LevED(I, O, codec = None):
@@ -80,7 +80,7 @@ def LevED(I, O, codec = None):
         INS = lambda T:          codec.CodeLength(T)
         DEL = lambda T: math.log(codec.CodeLength(T), 2)
     else:
-        SUB = lambda T_i, T_o: 0.0 if (T_i == T_o) else 1
+        SUB = lambda T_i, T_o: 0 if (T_i == T_o) else 1
         INS = lambda T: 1
         DEL = lambda T: 1
     
@@ -212,7 +212,7 @@ def PrettyAlignment(alignment):
     E = '  E : '
     for arc in alignment:
         i, o = token_repr(arc.i), token_repr(arc.o)
-        e = '' if arc.edit == 'C' else arc.edit  # don't bother printing 'C'
+        e = '' if arc.edit.startswith('C') else arc.edit  # don't bother printing 'C'
 
         ni, no, ne = display_width(i), display_width(o), display_width(e)
         n = max(ni, no, ne) + 1
@@ -377,8 +377,8 @@ if __name__ == '__main__':
         lm = LanguageModel(args.lm)
     
     if args.codec:
-        logging.info('Loading Huffman codec ...')
-        codec = HuffmanEncoder(args.codec)
+        logging.info('Loading codec ...')
+        codec = Codec(args.codec)
 
     logging.info('Evaluating utterance-level results ...')
     with open(args.details, 'w+', encoding='utf8') as fo:
