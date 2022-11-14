@@ -3,6 +3,7 @@ data/google_ngram
 data/gigaspeech
 
 lm/*
+codec/*
 
 *.txt
 *.arpa
