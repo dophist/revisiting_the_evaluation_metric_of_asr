@@ -8,6 +8,7 @@ logging.basicConfig(stream=sys.stderr, level=logging.INFO, format='[%(levelname)
 import math
 import kenlm  # pip install https://github.com/kpu/kenlm/archive/master.zip
 import sentencepiece as spm  # pip install sentencepiece
+from dahuffman import HuffmanCodec  # pip install dahuffman
 
 
 class LanguageModel:
@@ -28,6 +29,27 @@ class LanguageModel:
         ostate = kenlm.State()
         score = self.model.BaseScore(istate, token, ostate)
         return score, ostate
+
+
+class HuffmanEncoder:
+    def __init__(self, path):
+        word_counts = {}
+        with open(path, 'r') as f:
+            for line in f:
+                cols = line.strip().split()
+                if len(cols) == 2:
+                    token, count = cols
+                    word_counts[token] = int(count)
+        self.codec = HuffmanCodec.from_frequencies(word_counts)
+        self.code_table = self.codec.get_code_table()
+        logging.info(f'<unk> (nbits, encoded): {self.code_table["<unk>"]}')
+    
+    def CodeLength(self, token):
+        if token in self.code_table:
+            nbits, encoded = self.code_table[token]
+        else:
+            nbits, encoded = self.code_table['<unk>'] # TODO: more thoughts on <unk> length, now it is pretty short
+        return nbits
 
 
 # For Input-tape I and Output-tape O, and a search lattice S of size (X * Y), where:
@@ -52,13 +74,16 @@ class BackPointer:
         self.edit = edit_type + (F':{edit_length:.1f}' if edit_length else '')
 
 
-def LevED(
-    I,
-    O,
-    SUB = lambda T1, T2: 0.0 if (T1 == T2) else 1.0,
-    INS = lambda T: 1.0,
-    DEL = lambda T: 1.0,
-):
+def LevED(I, O, codec = None):
+    if codec:
+        SUB = lambda T_i, T_o: 0.0 if T_i == T_o else float('inf')
+        INS = lambda T:          codec.CodeLength(T)
+        DEL = lambda T: math.log(codec.CodeLength(T), 2)
+    else:
+        SUB = lambda T_i, T_o: 0.0 if (T_i == T_o) else 1
+        INS = lambda T: 1
+        DEL = lambda T: 1
+    
     X = len(I) + 1
     Y = len(O) + 1
     S = [ [ LatticeState(x, y) for y in range(Y) ] for x in range(X) ]
@@ -70,22 +95,25 @@ def LevED(
             s = S[x][y]
 
             if x-1 >= 0 and y-1 >= 0:
-                d = S[x-1][y-1].distance + SUB(I[x-1], O[y-1])
+                l = SUB(I[x-1], O[y-1])
+                d = S[x-1][y-1].distance + l
                 if d < s.distance:
                     s.distance = d
-                    s.bp = BackPointer(x-1, y-1, I[x-1], O[y-1], 'C' if I[x-1] == O[y-1] else 'S')
+                    s.bp = BackPointer(x-1, y-1, I[x-1], O[y-1], 'C' if I[x-1] == O[y-1] else 'S', l)
 
             if x-1 >= 0:
-                d = S[x-1][y].distance + DEL(I[x-1])
+                l = DEL(I[x-1])
+                d = S[x-1][y].distance + l
                 if d < s.distance:
                     s.distance = d
-                    s.bp = BackPointer(x-1, y, I[x-1], '', 'D')
+                    s.bp = BackPointer(x-1, y, I[x-1], '', 'D', l)
 
             if y-1 >= 0:
-                d = S[x][y-1].distance + INS(O[y-1])
+                l = INS(O[y-1])
+                d = S[x][y-1].distance + l
                 if d < s.distance:
                     s.distance = d
-                    s.bp = BackPointer(x, y-1, '', O[y-1], 'I')
+                    s.bp = BackPointer(x, y-1, '', O[y-1], 'I', l)
 
     # Traceback
     # Loop Invariant: traceback head at state s
@@ -96,7 +124,7 @@ def LevED(
         alignment.append(s.bp)
         s = S[s.bp.x][s.bp.y]
     alignment.reverse()
-    return (S[-1][-1].distance, alignment)
+    return (S[-1][-1].distance, S[0][-1].distance, alignment)
 
 
 def InfoED(I, O, lm):
@@ -198,7 +226,7 @@ def PrettyAlignment(alignment):
 def CountEdits(alignment):
     counts = { 'C': 0, 'S': 0, 'I': 0, 'D': 0 }
     for arc in alignment:
-        counts[arc.edit] += 1
+        counts[ arc.edit.split(':')[0] ] += 1
     return (counts['C'], counts['S'], counts['I'], counts['D'])
 
 
@@ -310,7 +338,8 @@ if __name__ == '__main__':
     parser.add_argument('--logk', type=int, default=500 , help='logging interval')
     parser.add_argument('-t', '--tokenizer', type=str, default='word', help='word/char/sentencepiece_model_path')
     parser.add_argument('-m', '--metrics', nargs='+', choices=['TER', 'NID'], default=['TER'], help='nargs: TER, NID, ...')
-    parser.add_argument('-l', '--lm', type=str, help='Language prior used in NID')
+    parser.add_argument('--lm', type=str, help='Language prior used in NID')
+    parser.add_argument('--codec', type=str, help='Token codec used in NID')
     parser.add_argument('--ref', type=str, required=True, help='REF text')
     parser.add_argument('--hyp', type=str, required=True, help='HYP text')
     parser.add_argument('details', type=str)
@@ -346,12 +375,16 @@ if __name__ == '__main__':
     if args.lm:
         logging.info('Loading language model ...')
         lm = LanguageModel(args.lm)
+    
+    if args.codec:
+        logging.info('Loading Huffman codec ...')
+        codec = HuffmanEncoder(args.codec)
 
     logging.info('Evaluating utterance-level results ...')
     with open(args.details, 'w+', encoding='utf8') as fo:
         for utt in utts:
             if 'TER' in args.metrics:
-                distance, alignment = LevED(tokenizer(refs[utt]), tokenizer(hyps[utt]))
+                distance, _, alignment = LevED(tokenizer(refs[utt]), tokenizer(hyps[utt]))
                 c, s, i, d = CountEdits(alignment)
 
                 stats.C += c
@@ -366,10 +399,15 @@ if __name__ == '__main__':
                 print('-'* 35, file=fo)
 
             if 'NID' in args.metrics:
-                assert(lm)
+                if args.lm:
+                    ED = lambda I, O: InfoED(I, O, lm)
+                elif args.codec:
+                    ED = lambda I, O: LevED(I, O, codec)
+                else:
+                    raise RuntimeError('No prior knowledge source for Kolmogorov complexity. (Ngram-LM or HuffmanCodec)')
 
-                K_r2h, K_hyp, alignment1 = InfoED(tokenizer(refs[utt]), tokenizer(hyps[utt]), lm)
-                K_h2r, K_ref, alignment2 = InfoED(tokenizer(hyps[utt]), tokenizer(refs[utt]), lm)
+                K_r2h, K_hyp, alignment1 = ED(tokenizer(refs[utt]), tokenizer(hyps[utt]))
+                K_h2r, K_ref, alignment2 = ED(tokenizer(hyps[utt]), tokenizer(refs[utt]))
 
                 stats.K_r2h += K_r2h
                 stats.K_h2r += K_h2r
@@ -378,9 +416,9 @@ if __name__ == '__main__':
 
                 NID = ComputeNID(K_r2h, K_h2r, K_ref, K_hyp)
 
-                # following two alignments are for debugging purpose
-                _, _, alignment3 = InfoED([], tokenizer(refs[utt]), lm)
-                _, _, alignment4 = InfoED([], tokenizer(hyps[utt]), lm)
+                # for debugging purpose
+                _, _, alignment3 = ED([], tokenizer(refs[utt]))
+                _, _, alignment4 = ED([], tokenizer(hyps[utt]))
 
                 print(F'{{ "utt":{utt}, "NID":{NID:.2f}, "K(hyp|ref)":{K_r2h:.1f}, "K(ref|hyp)":{K_h2r:.1f}, "K(ref)":{K_ref:.1f}, "K(hyp):":{K_hyp:.1f} }}', file=fo)
                 print(
