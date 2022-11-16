@@ -29,7 +29,7 @@ class BackPointer:
         self.edit = edit_type + ':' + (F'{length:.1f}' if isinstance(length, float) else str(length))
 
 
-class Prior:
+class Codec:
     def __init__(self, opt):
         t, m = opt.split(':')
         assert(t == 'spm')
@@ -44,15 +44,15 @@ class Prior:
         else:
             raise RuntimeError
 
-def LevenshteinDistance(I, O, prior = None):
-    if not prior:
+def LevenshteinDistance(I, O, codec = None):
+    if not codec:
         SUB = lambda x, y: 0 if I[x] == O[y] else 1
         INS_cache = [ 1 for T in O ]
         DEL_cache = [ 1 for T in I ]
-    elif prior.type == 'spm':
+    elif codec.type == 'spm':
         SUB = lambda x, y: 0.0 if I[x] == O[y] else float('inf')
-        INS_cache = [          prior.CodeBits(T)     for T in O ]
-        DEL_cache = [ math.log(prior.CodeBits(T), 2) for T in I ]
+        INS_cache = [          codec.CodeBits(T)     for T in O ]
+        DEL_cache = [ math.log(codec.CodeBits(T), 2) for T in I ]
     else:
         raise RuntimeError
     
@@ -237,7 +237,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--logk', type=int, default=500 , help='logging interval')
     parser.add_argument('-t', '--tokenizer', type=str, required=True, help='word / char / sentencepiece_model_path')
-    parser.add_argument('--prior', type=str, help='Prior for token coding in NID, e.g. spm:sentencepiece.model, ...')
+    parser.add_argument('--codec', type=str, help='Token codec in NID, e.g. spm:sentencepiece.model, ...')
     parser.add_argument('-m', '--metrics', nargs='+', choices=['TER', 'NID'], default=['TER'], help='nargs: TER, NID, ...')
     parser.add_argument('--ref', type=str, required=True, help='REF text')
     parser.add_argument('--hyp', type=str, required=True, help='HYP text')
@@ -270,9 +270,9 @@ if __name__ == '__main__':
     logging.info('Generating tokenizer ...')
     tokenizer = GenerateTokenizer(args.tokenizer)
 
-    if args.prior:
-        logging.info('Loading prior from {args.codec} ...')
-        prior = Prior(args.prior)
+    if args.codec:
+        logging.info('Loading codec from {args.codec} ...')
+        codec = Codec(args.codec)
 
     logging.info('Evaluating utterance-level results ...')
     with open(args.details, 'w+', encoding='utf8') as fo:
@@ -293,7 +293,7 @@ if __name__ == '__main__':
                 print('-'* 35, file=fo)
 
             if 'NID' in args.metrics:
-                ED = lambda I, O: LevenshteinDistance(I, O, prior)
+                ED = lambda I, O: LevenshteinDistance(I, O, codec)
 
                 K_r2h, K_hyp, alignment1 = ED(tokenizer(refs[utt]), tokenizer(hyps[utt]))
                 K_h2r, K_ref, alignment2 = ED(tokenizer(hyps[utt]), tokenizer(refs[utt]))

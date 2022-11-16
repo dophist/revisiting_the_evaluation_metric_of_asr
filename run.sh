@@ -14,7 +14,7 @@ hyp=hyp.txt
 ./error_rate  -m TER  -t word  --ref $ref  --hyp $hyp  DETAILS0.txt | tee RESULTS0.txt
 
 # subword-level TER/mTER & NID
-./error_rate  -m TER NID  -t assets/$tokenizer  --prior spm:assets/$tokenizer  --ref $ref  --hyp $hyp  DETAILS1.txt | tee RESULTS1.txt
+./error_rate  -m TER NID  -t assets/$tokenizer  --codec spm:assets/$tokenizer  --ref $ref  --hyp $hyp  DETAILS1.txt | tee RESULTS1.txt
 
 ## run examples in paper
 #./error_rate  -m TER  --ref data/paper/ref.txt  --hyp data/paper/hyp.txt  tmp.txt
