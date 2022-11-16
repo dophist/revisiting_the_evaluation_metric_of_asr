@@ -2,8 +2,7 @@ data/wikitext-103*
 data/google_ngram
 data/gigaspeech
 
-lm/*
-codec/*
+assets/*
 
 *.txt
 *.arpa
