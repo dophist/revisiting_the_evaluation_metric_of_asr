@@ -38,7 +38,8 @@ class Prior:
     
     def CodeBits(self, token):
         if self.type == 'spm':
-            ln_p = self.model.GetScore(self.model.PieceToId(token))
+            i = self.model.PieceToId(token)
+            ln_p = self.model.GetScore(i) if i != self.model.unk_id() else math.log(1e-7)
             return -math.log(math.e, 2) * ln_p
         else:
             raise RuntimeError
