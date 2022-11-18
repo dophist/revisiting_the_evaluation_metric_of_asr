@@ -50,9 +50,9 @@ def LevenshteinDistance(I, O, codec = None):
         INS_cache = [ 1 for T in O ]
         DEL_cache = [ 1 for T in I ]
     elif codec.type == 'spm':
-        SUB = lambda x, y: 0.0 if I[x] == O[y] else float('inf')
-        INS_cache = [          codec.CodeBits(T)     for T in O ]
-        DEL_cache = [ math.log(codec.CodeBits(T), 2) for T in I ]
+        SUB = lambda x, y: 0.0 if I[x] == O[y] else codec.CodeBits(O[y])
+        INS_cache = [ codec.CodeBits(T) for T in O ]
+        DEL_cache = [ 0.0               for T in I ]
     else:
         raise RuntimeError
     
