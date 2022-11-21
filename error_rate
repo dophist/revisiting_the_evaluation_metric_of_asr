@@ -5,10 +5,8 @@
 import sys, argparse, json, logging
 logging.basicConfig(stream=sys.stderr, level=logging.INFO, format='[%(levelname)s] %(message)s')
 
-import math
 import sentencepiece as spm  # pip install sentencepiece
-#import kenlm  # pip install https://github.com/kpu/kenlm/archive/master.zip
-#from dahuffman import HuffmanCodec  # pip install dahuffman
+
 
 # For Input-tape I and Output-tape O, and a search lattice S of size (X * Y), where:
 #    X, Y are state-indexes, tokens on tapes are arcs
@@ -29,32 +27,10 @@ class BackPointer:
         self.edit = edit_type + ':' + (F'{length:.1f}' if isinstance(length, float) else str(length))
 
 
-class Codec:
-    def __init__(self, opt):
-        t, m = opt.split(':')
-        assert(t == 'spm')
-        self.type = t
-        self.model = spm.SentencePieceProcessor(model_file = m)
-    
-    def CodeBits(self, token):
-        if self.type == 'spm':
-            i = self.model.PieceToId(token)
-            ln_p = self.model.GetScore(i) if i != self.model.unk_id() else math.log(1e-7)
-            return -math.log(math.e, 2) * ln_p
-        else:
-            raise RuntimeError
-
-def LevenshteinDistance(I, O, codec = None):
-    if not codec:
-        SUB = lambda x, y: 0 if I[x] == O[y] else 1
-        INS_cache = [ 1 for T in O ]
-        DEL_cache = [ 1 for T in I ]
-    elif codec.type == 'spm':
-        SUB = lambda x, y: 0.0 if I[x] == O[y] else codec.CodeBits(O[y])
-        INS_cache = [ codec.CodeBits(T) for T in O ]
-        DEL_cache = [ 0.0               for T in I ]
-    else:
-        raise RuntimeError
+def LevED(I, O, bottom = True):
+    SUB = lambda Ti, To: 0 if Ti == To else 1 if bottom else LevED(list(Ti), list(To))[0] / max(len(Ti), len(To))
+    INS = lambda T: 1
+    DEL = lambda T: 1
     
     X = len(I) + 1
     Y = len(O) + 1
@@ -67,21 +43,21 @@ def LevenshteinDistance(I, O, codec = None):
             s = S[x][y]
 
             if x-1 >= 0 and y-1 >= 0:
-                l = SUB(x-1, y-1)
+                l = SUB(I[x-1], O[y-1])
                 d = S[x-1][y-1].distance + l
                 if d < s.distance:
                     s.distance = d
                     s.bp = BackPointer(x-1, y-1, I[x-1], O[y-1], 'C' if I[x-1] == O[y-1] else 'S', l)
 
             if x-1 >= 0:
-                l = DEL_cache[x-1]
+                l = DEL(I[x-1])
                 d = S[x-1][y].distance + l
                 if d < s.distance:
                     s.distance = d
                     s.bp = BackPointer(x-1, y, I[x-1], '', 'D', l)
 
             if y-1 >= 0:
-                l = INS_cache[y-1]
+                l = INS(O[y-1])
                 d = S[x][y-1].distance + l
                 if d < s.distance:
                     s.distance = d
@@ -96,7 +72,8 @@ def LevenshteinDistance(I, O, codec = None):
         alignment.append(s.bp)
         s = S[s.bp.x][s.bp.y]
     alignment.reverse()
-    return (S[-1][-1].distance, S[0][-1].distance, alignment)
+
+    return (S[-1][-1].distance, alignment)
 
 
 def PrettyAlignment(alignment):
@@ -198,10 +175,10 @@ class EvalStats:
             F'TER:  {self.token_error_rate:.2f}%\n'
             F'mTER: {self.modified_token_error_rate:.2f}%\n'
             '-------------------- NID -------------------\n'
-            F'K_r2h: {self.K_r2h:.1f} bits\n'
-            F'K_h2r: {self.K_h2r:.1f} bits\n'
-            F'K_ref: {self.K_ref:.1f} bits\n'
-            F'K_hyp: {self.K_hyp:.1f} bits\n'
+            F'K_r2h: {self.K_r2h:.1f}\n'
+            F'K_h2r: {self.K_h2r:.1f}\n'
+            F'K_ref: {self.K_ref:.1f}\n'
+            F'K_hyp: {self.K_hyp:.1f}\n'
             F'NID: {self.normalized_information_distance:.2f}%\n'
             '========================================================\n'
         )
@@ -237,7 +214,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--logk', type=int, default=500 , help='logging interval')
     parser.add_argument('-t', '--tokenizer', type=str, required=True, help='word / char / sentencepiece_model_path')
-    parser.add_argument('--codec', type=str, help='Token codec in NID, e.g. spm:sentencepiece.model, ...')
     parser.add_argument('-m', '--metrics', nargs='+', choices=['TER', 'NID'], default=['TER'], help='nargs: TER, NID, ...')
     parser.add_argument('--ref', type=str, required=True, help='REF text')
     parser.add_argument('--hyp', type=str, required=True, help='HYP text')
@@ -270,15 +246,11 @@ if __name__ == '__main__':
     logging.info('Generating tokenizer ...')
     tokenizer = GenerateTokenizer(args.tokenizer)
 
-    if args.codec:
-        logging.info('Loading codec from {args.codec} ...')
-        codec = Codec(args.codec)
-
     logging.info('Evaluating utterance-level results ...')
     with open(args.details, 'w+', encoding='utf8') as fo:
         for utt in utts:
             if 'TER' in args.metrics:
-                distance, _, alignment = LevenshteinDistance(tokenizer(refs[utt]), tokenizer(hyps[utt]))
+                distance, alignment = LevED(tokenizer(refs[utt]), tokenizer(hyps[utt]))
                 c, s, i, d = CountEdits(alignment)
 
                 stats.C += c
@@ -293,10 +265,10 @@ if __name__ == '__main__':
                 print('-'* 35, file=fo)
 
             if 'NID' in args.metrics:
-                ED = lambda I, O: LevenshteinDistance(I, O, codec)
+                ED = lambda I, O: LevED(I, O, False)
 
-                K_r2h, K_hyp, alignment1 = ED(tokenizer(refs[utt]), tokenizer(hyps[utt]))
-                K_h2r, K_ref, alignment2 = ED(tokenizer(hyps[utt]), tokenizer(refs[utt]))
+                distance, alignment = ED(tokenizer(refs[utt]), tokenizer(hyps[utt]))
+                K_r2h, K_h2r, K_ref, K_hyp = distance, distance, len(tokenizer(refs[utt])), len(tokenizer(hyps[utt]))
 
                 stats.K_r2h += K_r2h
                 stats.K_h2r += K_h2r
@@ -305,18 +277,8 @@ if __name__ == '__main__':
 
                 NID = ComputeNID(K_r2h, K_h2r, K_ref, K_hyp)
 
-                # for debugging purpose
-                _, _, alignment3 = ED([], tokenizer(refs[utt]))
-                _, _, alignment4 = ED([], tokenizer(hyps[utt]))
-
                 print(F'{{ "utt":{utt}, "NID":{NID:.2f}, "K(hyp|ref)":{K_r2h:.1f}, "K(ref|hyp)":{K_h2r:.1f}, "K(ref)":{K_ref:.1f}, "K(hyp):":{K_hyp:.1f} }}', file=fo)
-                print(
-                    *PrettyAlignment(alignment1), '',
-                    *PrettyAlignment(alignment2), '',
-                    *PrettyAlignment(alignment3), '',
-                    *PrettyAlignment(alignment4),
-                    sep='\n', file=fo,
-                )
+                print(*PrettyAlignment(alignment), sep='\n', file=fo)
 
             print('=' * 70, file=fo)
 
