@@ -19,15 +19,12 @@ class Codec:
 
             with open(m, 'r') as f:
                 for l in f:
-                    l = l.strip()
-                    if '<unk>' not in l:
-                        token, count = l.split()
-                        self.model[token] = int(count)
+                    cols = l.strip().split()
+                    if cols:
+                        token, count = cols[0], int(cols[1])
                         total += int(count)
-                    else:
-                        unk, count, num_unks = l.split()
-                        assert (unk == '<unk>')
-                        total += int(count)
+                        if token != '<unk>':
+                            self.model[token] = int(count)
 
             for k, v in self.model.items():
                 self.model[k] = -math.log(v / total, 2)
