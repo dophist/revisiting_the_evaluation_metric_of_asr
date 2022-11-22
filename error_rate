@@ -22,9 +22,9 @@ class Codec:
                     cols = l.strip().split()
                     if cols:
                         token, count = cols[0], int(cols[1])
-                        total += int(count)
+                        total += count
                         if token != '<unk>':
-                            self.model[token] = int(count)
+                            self.model[token] = count
 
             for k, v in self.model.items():
                 self.model[k] = -math.log(v / total, 2)
