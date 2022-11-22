@@ -331,7 +331,7 @@ if __name__ == '__main__':
                 stats.K_ref += K_ref
                 stats.K_hyp += K_hyp
 
-                NID = ComputeNID(K, K, K_ref, K_hyp)
+                NID = ComputeNID(K_r2h, K_h2r, K_ref, K_hyp)
 
                 print(F'{{ "utt":{utt}, "NID":{NID:.2f}, "K(hyp|ref)":{K_r2h:.1f}, "K(ref|hyp)":{K_h2r:.1f}, "K(ref)":{K_ref:.1f}, "K(hyp):":{K_hyp:.1f} }}', file=fo)
                 print(*PrettyAlignment(alignment), sep='\n', file=fo)
