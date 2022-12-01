@@ -50,21 +50,14 @@ class Codec:
             raise RuntimeError
 
 
-# For Input-tape I and Output-tape O, and a search lattice S of size (X * Y), where:
-#    X, Y are state-indexes, tokens on tapes are arcs
-#
-# corresponding indexing system:
-#   x-axis step:   { S[x][y] } token:I[x] { S[x+1][y] }
-#   y-axis step:   { S[x][y] } token:O[y] { S[x][y+1] }
-
-@dataclass
+@dataclass(slots=True)
 class LatticeState:
     x : int = 0
     y : int = 0
     distance : float = float('inf')
-    bp = None  # backpointer to previous state on the best path
+    bp : Any = None  # backpointer to previous state on the best path
 
-@dataclass
+@dataclass(slots=True)
 class BackPointer:
     x : int = 0
     y : int = 0
@@ -79,6 +72,12 @@ def LevED(I, O,
     INS = lambda T: 1,
     DEL = lambda T: 1,
 ):
+    # For Input-tape I and Output-tape O, and a search lattice S of size (X * Y), where:
+    #    X, Y are state-indexes, tokens on tapes are arcs
+    #
+    # corresponding indexing system:
+    #   x-axis step:   { S[x][y] } token:I[x] { S[x+1][y] }
+    #   y-axis step:   { S[x][y] } token:O[y] { S[x][y+1] }
     X = len(I) + 1
     Y = len(O) + 1
     S = [ [ LatticeState(x, y) for y in range(Y) ] for x in range(X) ]
