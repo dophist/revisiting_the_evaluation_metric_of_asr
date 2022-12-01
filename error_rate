@@ -4,6 +4,9 @@
 
 import sys, argparse, json, logging
 logging.basicConfig(stream=sys.stderr, level=logging.INFO, format='[%(levelname)s] %(message)s')
+
+from dataclasses import dataclass
+from typing import Any, Union
 import math
 import sentencepiece as spm  # pip install sentencepiece
 
@@ -53,17 +56,22 @@ class Codec:
 # corresponding indexing system:
 #   x-axis step:   { S[x][y] } token:I[x] { S[x+1][y] }
 #   y-axis step:   { S[x][y] } token:O[y] { S[x][y+1] }
-class LatticeState:
-    def __init__(self, x, y):
-        self.distance = float('inf')
-        self.x, self.y = x, y
-        self.bp = None  # backpointer
 
+@dataclass
+class LatticeState:
+    x : int = 0
+    y : int = 0
+    distance : float = float('inf')
+    bp = None  # backpointer to previous state on the best path
+
+@dataclass
 class BackPointer:
-    def __init__(self, x, y, i, o, edit_type, length):
-        self.x, self.y = x, y
-        self.i, self.o = i, o
-        self.edit = edit_type + ':' + (F'{length:.1f}' if isinstance(length, float) else str(length))
+    x : int = 0
+    y : int = 0
+    i : str = ''
+    o : str = ''
+    edit : str = '' # C, S, I, D
+    length : Union[int, float] = None
 
 
 def LevED(I, O, 
@@ -129,7 +137,7 @@ def PrettyAlignment(alignment):
     E = '  E : '
     for arc in alignment:
         i, o = token_repr(arc.i), token_repr(arc.o)
-        e = '' if arc.edit.startswith('C') else arc.edit  # don't bother printing 'C'
+        e = '' if arc.edit == 'C' else arc.edit + (F':{arc.length:.2f}' if isinstance(arc.length, float) else '') # don't bother printing 'C'
 
         ni, no, ne = display_width(i), display_width(o), display_width(e)
         n = max(ni, no, ne) + 1
@@ -143,7 +151,7 @@ def PrettyAlignment(alignment):
 def CountEdits(alignment):
     counts = { 'C': 0, 'S': 0, 'I': 0, 'D': 0 }
     for arc in alignment:
-        counts[ arc.edit.split(':')[0] ] += 1
+        counts[arc.edit] += 1
     return (counts['C'], counts['S'], counts['I'], counts['D'])
 
 
