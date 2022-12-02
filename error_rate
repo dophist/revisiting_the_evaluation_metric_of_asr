@@ -2,41 +2,41 @@
 # coding=utf8
 # Copyright  2022  Jiayu DU
 
-import sys, argparse, json, logging
+import sys, argparse, json, logging, math
 logging.basicConfig(stream=sys.stderr, level=logging.INFO, format='[%(levelname)s] %(message)s')
 
 from dataclasses import dataclass
-import math
 import sentencepiece as spm  # pip install sentencepiece
 
 
 class Codec:
-    def __init__(self, config):
-        t, m = config.split(':')
-        if t == 'spm':
-            self.model = spm.SentencePieceProcessor(model_file = m)
-        elif t == 'count':
-            total = 0
-            self.model = {}
+    def __init__(self, model_option):
+        mtype, mpath = model_option.split(':')
+        match mtype:
+            case 'spm':
+                self.model = spm.SentencePieceProcessor(mpath)
+            case 'count':
+                total = 0
+                self.model = {}
 
-            with open(m, 'r') as f:
-                for l in f:
-                    cols = l.strip().split()
-                    if cols:
-                        token, count = cols[0], int(cols[1])
-                        total += count
-                        if token != '<unk>':
-                            self.model[token] = count
+                with open(mpath) as f:
+                    for l in f:
+                        cols = l.strip().split()
+                        if cols:
+                            token, count = cols[0], int(cols[1])
+                            total += count
+                            if token != '<unk>':
+                                self.model[token] = count
 
-            for k, v in self.model.items():
-                self.model[k] = -math.log(v / total, 2)
-            self.model['<unk>'] = -math.log(1e-7, 2)
+                for k, v in self.model.items():
+                    self.model[k] = -math.log(v / total, 2)
+                self.model['<unk>'] = -math.log(1e-7, 2)
 
-        else:
-            raise RuntimeError
+            case _:
+                raise RuntimeError
 
 
-    def LenBits(self, token):
+    def NumBits(self, token):
         if isinstance(self.model, dict):
             return self.model.get(token, self.model['<unk>'])
 
@@ -66,7 +66,7 @@ class BackPointer:
     length : int | float = None
 
 
-def LevED(
+def LevenshteinDistance(
     I : list[str], O: list[str], 
     SUB = lambda Ti, To: 0 if Ti == To else 1,
     INS = lambda T: 1,
@@ -109,7 +109,7 @@ def LevED(
                     s.distance = d
                     s.bp = BackPointer(x, y-1, '', O[y-1], 'I', l)
 
-    # Best path traceback
+    # Traceback
     #   Loop Invariant: traceback head at state s
     #   Termination: s reaches origin
     alignment = []
@@ -156,9 +156,9 @@ def CountEdits(alignment):
 
 def ComputeTER(c, s, i, d):
     assert((c + s + d) != 0)
-    num_edits = (s + d + i)
-    ref_len = (c + s + d)
-    hyp_len = (c + s + i)
+    num_edits =     s + i + d
+    ref_len   = c + s     + d
+    hyp_len   = c + s + i
     return 100.0 * num_edits / ref_len, 100.0 * num_edits / max(ref_len, hyp_len)
 
 
@@ -302,7 +302,7 @@ if __name__ == '__main__':
     with open(args.details, 'w+', encoding='utf8') as fo:
         for utt in utts:
             if 'TER' in args.metrics:
-                distance, ref_len, hyp_len, alignment = LevED(tokenizer(refs[utt]), tokenizer(hyps[utt]))
+                distance, ref_len, hyp_len, alignment = LevenshteinDistance(tokenizer(refs[utt]), tokenizer(hyps[utt]))
 
                 c, s, i, d = CountEdits(alignment)
                 stats.C += c
@@ -318,16 +318,16 @@ if __name__ == '__main__':
 
             if 'NID' in args.metrics:
                 if not args.codec:
-                    ED = lambda I, O: LevED(I, O,
-                        SUB = lambda T_i, T_o: LevED(list(T_i), list(T_o))[0] / max(len(T_i), len(T_o)),
+                    ED = lambda I, O: LevenshteinDistance(I, O,
+                        SUB = lambda T_i, T_o: LevenshteinDistance(list(T_i), list(T_o))[0] / max(len(T_i), len(T_o)),
                         INS = lambda T: 1,
                         DEL = lambda T: 1,
                     )
                 else:
-                    ED = lambda I, O: LevED(I, O,
-                        SUB = lambda T_i, T_o: LevED(list(T_i), list(T_o))[0] / max(len(T_i), len(T_o)) * max(codec.LenBits(T_i), codec.LenBits(T_o)),
-                        INS = lambda T: codec.LenBits(T),
-                        DEL = lambda T: codec.LenBits(T),
+                    ED = lambda I, O: LevenshteinDistance(I, O,
+                        SUB = lambda T_i, T_o: LevenshteinDistance(list(T_i), list(T_o))[0] / max(len(T_i), len(T_o)) * max(codec.NumBits(T_i), codec.NumBits(T_o)),
+                        INS = lambda T: codec.NumBits(T),
+                        DEL = lambda T: codec.NumBits(T),
                     )
 
                 K, K_hyp, K_ref, alignment = ED(tokenizer(refs[utt]), tokenizer(hyps[utt]))
