@@ -49,21 +49,21 @@ class Codec:
             raise RuntimeError
 
 
-@dataclass
+@dataclass(slots=True)
 class LatticeState:
     x : int = 0
     y : int = 0
     distance : float = float('inf')
-    bp = None  # backpointer to predecessor state on the best path
+    bp : object = None  # backpointer to predecessor state on the best path
 
-@dataclass
+@dataclass(slots=True)
 class BackPointer:
     x : int = 0
     y : int = 0
     i : str = ''
     o : str = ''
     edit : str = '' # C, S, I, D
-    length : int|float = None
+    length : int | float = None
 
 
 def LevED(
