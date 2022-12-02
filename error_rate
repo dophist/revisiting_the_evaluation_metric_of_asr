@@ -29,7 +29,7 @@ class Codec:
                 self.model['<unk>'] = -math.log(1/total, 2)
 
             case _:
-                raise RuntimeError
+                raise NotImplementedError
 
     def NumBits(self, token):
         if isinstance(self.model, dict):
@@ -41,7 +41,7 @@ class Codec:
             return -math.log(math.e, 2) * ln_p
 
         else:
-            raise RuntimeError
+            raise NotImplementedError
 
 
 @dataclass(slots=True)
