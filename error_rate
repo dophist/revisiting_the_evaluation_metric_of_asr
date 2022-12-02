@@ -24,9 +24,9 @@ class Codec:
                             if token != '<unk>':
                                 counts[token] = count
 
-                total = sum(counts.values())
-                self.model = { k : -math.log(v/total, 2) for k, v in counts.items() }
-                self.model['<unk>'] = -math.log(1/total, 2)
+                N = sum(counts.values())
+                self.model = { t : -math.log(n/N, 2) for t, n in counts.items() }
+                self.model['<unk>'] = -math.log(1/N, 2)
 
             case _:
                 raise NotImplementedError
