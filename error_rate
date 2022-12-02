@@ -6,7 +6,6 @@ import sys, argparse, json, logging
 logging.basicConfig(stream=sys.stderr, level=logging.INFO, format='[%(levelname)s] %(message)s')
 
 from dataclasses import dataclass
-from typing import Any, Union
 import math
 import sentencepiece as spm  # pip install sentencepiece
 
@@ -50,24 +49,25 @@ class Codec:
             raise RuntimeError
 
 
-@dataclass(slots=True)
+@dataclass
 class LatticeState:
     x : int = 0
     y : int = 0
     distance : float = float('inf')
-    bp : Any = None  # backpointer to previous state on the best path
+    bp = None  # backpointer to predecessor state on the best path
 
-@dataclass(slots=True)
+@dataclass
 class BackPointer:
     x : int = 0
     y : int = 0
     i : str = ''
     o : str = ''
     edit : str = '' # C, S, I, D
-    length : Union[int, float] = None
+    length : int|float = None
 
 
-def LevED(I, O, 
+def LevED(
+    I : list[str], O: list[str], 
     SUB = lambda Ti, To: 0 if Ti == To else 1,
     INS = lambda T: 1,
     DEL = lambda T: 1,
