@@ -11,30 +11,25 @@ import sentencepiece as spm  # pip install sentencepiece
 
 class Codec:
     def __init__(self, model_option):
-        mtype, mpath = model_option.split(':')
-        match mtype:
-            case 'spm':
+        match model_option.split(':'):
+            case ['spm', mpath]:
                 self.model = spm.SentencePieceProcessor(mpath)
-            case 'count':
-                total = 0
-                self.model = {}
 
+            case ['count', mpath]:
+                counts = {}
                 with open(mpath) as f:
-                    for l in f:
-                        cols = l.strip().split()
-                        if cols:
+                    for line in f:
+                        if cols := line.strip().split():
                             token, count = cols[0], int(cols[1])
-                            total += count
                             if token != '<unk>':
-                                self.model[token] = count
+                                counts[token] = count
 
-                for k, v in self.model.items():
-                    self.model[k] = -math.log(v / total, 2)
-                self.model['<unk>'] = -math.log(1e-7, 2)
+                total = sum(counts.values())
+                self.model = { k : -math.log(v/total, 2) for k, v in counts.items() }
+                self.model['<unk>'] = -math.log(1/total, 2)
 
             case _:
                 raise RuntimeError
-
 
     def NumBits(self, token):
         if isinstance(self.model, dict):
