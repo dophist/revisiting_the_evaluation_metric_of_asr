@@ -157,8 +157,11 @@ def ComputeTER(c, s, i, d):
     return 100.0 * num_edits / ref_len, 100.0 * num_edits / max(ref_len, hyp_len)
 
 
-def ComputeNID(K_r2h, K_h2r, K_ref, K_hyp):
-    return 100.0 * max(K_r2h, K_h2r) / max(K_ref, K_hyp)
+#def ComputeNID(K_r2h, K_h2r, K_ref, K_hyp):
+#    return 100.0 * max(K_r2h, K_h2r) / max(K_ref, K_hyp)
+
+def ComputeNIER(K, K_ref, K_hyp):
+    return 100.0 * K / (K_ref + K_hyp)
 
 
 def ComputeSER(num_err_utts, num_utts):
@@ -182,9 +185,13 @@ class EvalStats:
         self.C, self.S, self.I, self.D = 0, 0, 0, 0
         self.token_error_rate, self.modified_token_error_rate = 0.0, 0.0
 
-        # NID stats
-        self.K_r2h, self.K_h2r, self.K_ref, self.K_hyp = 0.0, 0.0, 0.0, 0.0
-        self.normalized_information_distance = 0.0
+        ## NID stats
+        #self.K_r2h, self.K_h2r, self.K_ref, self.K_hyp = 0.0, 0.0, 0.0, 0.0
+        #self.normalized_information_distance = 0.0
+
+        # NIER stats
+        self.K, self.K_ref, self.K_hyp = 0.0, 0.0, 0.0
+        self.normalized_information_error_rate = 0.0
 
     def to_kaldi(self):
         return (
@@ -215,12 +222,17 @@ class EvalStats:
             F'- DEL:  {self.D:>7}\n'
             F'TER:  {self.token_error_rate:.2f}%\n'
             F'mTER: {self.modified_token_error_rate:.2f}%\n'
-            '-------------------- NID -------------------\n'
-            F'K_r2h: {self.K_r2h:.1f} bits\n'
-            F'K_h2r: {self.K_h2r:.1f} bits\n'
+            #'-------------------- NID -------------------\n'
+            #F'K_r2h: {self.K_r2h:.1f} bits\n'
+            #F'K_h2r: {self.K_h2r:.1f} bits\n'
+            #F'K_ref: {self.K_ref:.1f} bits\n'
+            #F'K_hyp: {self.K_hyp:.1f} bits\n'
+            #F'NID: {self.normalized_information_distance:.2f}%\n'
+            '-------------------- NIER -------------------\n'
+            F'K    : {self.K:.1f} bits\n'
             F'K_ref: {self.K_ref:.1f} bits\n'
             F'K_hyp: {self.K_hyp:.1f} bits\n'
-            F'NID: {self.normalized_information_distance:.2f}%\n'
+            F'NIER: {self.normalized_information_error_rate:.2f}%\n'
             '========================================================\n'
         )
         return summary
@@ -256,7 +268,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--logk', type=int, default=500 , help='logging interval')
     parser.add_argument('-t', '--tokenizer', type=str, required=True, help='word / char / sentencepiece_model_path')
-    parser.add_argument('-m', '--metrics', nargs='+', choices=['TER', 'NID'], default=['TER'], help='nargs: TER, NID, ...')
+    parser.add_argument('-m', '--metrics', nargs='+', choices=['TER', 'NIER'], default=['TER'], help='nargs: TER, NIER, ...')
     parser.add_argument('--codec', type=str, help='Token codec in NID, e.g. spm:sentencepiece.model, count:wordcount.tsv, ...')
     parser.add_argument('--ref', type=str, required=True, help='REF text')
     parser.add_argument('--hyp', type=str, required=True, help='HYP text')
@@ -297,7 +309,14 @@ if __name__ == '__main__':
     with open(args.details, 'w+', encoding='utf8') as fo:
         for utt in utts:
             if 'TER' in args.metrics:
-                distance, ref_len, hyp_len, alignment = LevenshteinDistance(tokenizer(refs[utt]), tokenizer(hyps[utt]))
+                ED = lambda I, O: LevenshteinDistance(
+                    I, O,
+                    SUB = lambda Ti, To: 0 if Ti == To else 1,
+                    INS = lambda T: 1,
+                    DEL = lambda T: 1,
+                )
+
+                distance, ref_len, hyp_len, alignment = ED(tokenizer(refs[utt]), tokenizer(hyps[utt]))
 
                 c, s, i, d = CountEdits(alignment)
                 stats.C += c
@@ -307,40 +326,58 @@ if __name__ == '__main__':
 
                 TER, mTER = ComputeTER(c, s, i, d)
 
-                print(F'{{ "utt":{utt}, "TER":{TER:.2f}, "mTER":{mTER:.2f}, "LevED":{distance}, "cor":{c}, "sub":{s}, "ins":{i}, "del":{d} }}', file=fo)
+                print(F'{{"utt":{utt}, "TER":{TER:.2f}, "mTER":{mTER:.2f}, "LevED":{distance}, "cor":{c}, "sub":{s}, "ins":{i}, "del":{d}}}', file=fo)
                 print(*PrettyAlignment(alignment), sep='\n', file=fo)
                 print('-'* 35, file=fo)
 
-            if 'NID' in args.metrics:
+            if 'NIER' in args.metrics:
                 if not args.codec:
                     ED = lambda I, O: LevenshteinDistance(I, O,
-                        SUB = lambda T_i, T_o: LevenshteinDistance(list(T_i), list(T_o))[0] / max(len(T_i), len(T_o)),
+                        SUB = lambda T_i, T_o: 0 if T_i == T_o else (
+                            LevenshteinDistance(list(T_i), list(T_o),
+                                SUB = lambda C_i, C_o: 0 if C_i == C_o else 2,
+                                INS = lambda C: 1,
+                                DEL = lambda C: 1,
+                            )[0] / (len(T_i) + len(T_o))
+                        ),
                         INS = lambda T: 1,
                         DEL = lambda T: 1,
                     )
                 else:
                     ED = lambda I, O: LevenshteinDistance(I, O,
-                        SUB = lambda T_i, T_o: LevenshteinDistance(list(T_i), list(T_o))[0] / max(len(T_i), len(T_o)) * max(codec.NumBits(T_i), codec.NumBits(T_o)),
+                        SUB = lambda T_i, T_o: (codec.NumBits(T_i) + codec.NumBits(T_o)) * (0 if T_i == T_o else 
+                            LevenshteinDistance(list(T_i), list(T_o),
+                                SUB = lambda C_i, C_o: 0 if C_i == C_o else 2,
+                                INS = lambda C: 1,
+                                DEL = lambda C: 1,
+                            )[0] / (len(T_i) + len(T_o))
+                        ),
                         INS = lambda T: codec.NumBits(T),
                         DEL = lambda T: codec.NumBits(T),
                     )
 
-                K, K_hyp, K_ref, alignment = ED(tokenizer(refs[utt]), tokenizer(hyps[utt]))
-                K_r2h, K_h2r = K, K
-
-                stats.K_r2h += K_r2h
-                stats.K_h2r += K_h2r
+                K, K_ref, K_hyp, alignment = ED(tokenizer(refs[utt]), tokenizer(hyps[utt]))
+                stats.K += K
                 stats.K_ref += K_ref
                 stats.K_hyp += K_hyp
 
-                NID = ComputeNID(K_r2h, K_h2r, K_ref, K_hyp)
+                NIER = ComputeNIER(K, K_ref, K_hyp)
 
-                print(F'{{ "utt":{utt}, "NID":{NID:.2f}, "K(hyp|ref)":{K_r2h:.1f}, "K(ref|hyp)":{K_h2r:.1f}, "K(ref)":{K_ref:.1f}, "K(hyp):":{K_hyp:.1f} }}', file=fo)
-                print(*PrettyAlignment(alignment), sep='\n', file=fo)
+                # for debug purpose
+                _, _, _, alignment1 = ED(tokenizer(refs[utt]), [])
+                _, _, _, alignment2 = ED([], tokenizer(hyps[utt]))
+
+                print(F'{{"utt":{utt}, "NIER":{NIER:.2f}, "K":{K:.2f}, "K(ref)":{K_ref:.2f}, "K(hyp)":{K_hyp:.2f}}}', file=fo)
+                print(
+                    *PrettyAlignment(alignment), '',
+                    *PrettyAlignment(alignment1), '',
+                    *PrettyAlignment(alignment2), 
+                    sep='\n', file=fo
+                )
 
             print('=' * 70, file=fo)
 
-            if locals().get('TER') or locals().get('NID'):
+            if locals().get('TER') or locals().get('NIER'):
                 stats.utts_with_error += 1
             stats.utts += 1
 
@@ -351,8 +388,8 @@ if __name__ == '__main__':
 
         if 'TER' in args.metrics:
             stats.token_error_rate, stats.modified_token_error_rate = ComputeTER(stats.C, stats.S, stats.I, stats.D)
-        if 'NID' in args.metrics:
-            stats.normalized_information_distance = ComputeNID(stats.K_r2h, stats.K_h2r, stats.K_ref, stats.K_hyp)
+        if 'NIER' in args.metrics:
+            stats.normalized_information_error_rate = ComputeNIER(stats.K, stats.K_ref, stats.K_hyp)
 
         print(stats.to_summary(), file=fo)
     logging.info(f'Total {stats.utts} utts evaluated.')
