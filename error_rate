@@ -148,7 +148,6 @@ def CountEdits(alignment):
         counts[arc.edit] += 1
     return (counts['C'], counts['S'], counts['I'], counts['D'])
 
-
 def ComputeTER(c, s, i, d):
     assert((c + s + d) != 0)
     num_edits =     s + i + d
@@ -156,12 +155,11 @@ def ComputeTER(c, s, i, d):
     hyp_len   = c + s + i
     return 100.0 * num_edits / ref_len, 100.0 * num_edits / max(ref_len, hyp_len)
 
+def ComputeNID(K_r2h, K_h2r, K_ref, K_hyp):
+    return 100.0 * max(K_r2h, K_h2r) / max(K_ref, K_hyp)
 
-#def ComputeNID(K_r2h, K_h2r, K_ref, K_hyp):
-#    return 100.0 * max(K_r2h, K_h2r) / max(K_ref, K_hyp)
-
-def ComputeNIER(K, K_ref, K_hyp):
-    return 100.0 * K / (K_ref + K_hyp)
+def ComputeNIER(I_err, I_ref, I_hyp):
+    return 100.0 * I_err / (I_ref + I_hyp)
 
 
 def ComputeSER(num_err_utts, num_utts):
@@ -185,12 +183,12 @@ class EvalStats:
         self.C, self.S, self.I, self.D = 0, 0, 0, 0
         self.token_error_rate, self.modified_token_error_rate = 0.0, 0.0
 
-        ## NID stats
-        #self.K_r2h, self.K_h2r, self.K_ref, self.K_hyp = 0.0, 0.0, 0.0, 0.0
-        #self.normalized_information_distance = 0.0
+        # NID stats
+        self.K_r2h, self.K_h2r, self.K_ref, self.K_hyp = 0.0, 0.0, 0.0, 0.0
+        self.normalized_information_distance = 0.0
 
         # NIER stats
-        self.K, self.K_ref, self.K_hyp = 0.0, 0.0, 0.0
+        self.I_err, self.I_ref, self.I_hyp = 0.0, 0.0, 0.0
         self.normalized_information_error_rate = 0.0
 
     def to_kaldi(self):
@@ -222,16 +220,16 @@ class EvalStats:
             F'- DEL:  {self.D:>7}\n'
             F'TER:  {self.token_error_rate:.2f}%\n'
             F'mTER: {self.modified_token_error_rate:.2f}%\n'
-            #'-------------------- NID -------------------\n'
-            #F'K_r2h: {self.K_r2h:.1f} bits\n'
-            #F'K_h2r: {self.K_h2r:.1f} bits\n'
-            #F'K_ref: {self.K_ref:.1f} bits\n'
-            #F'K_hyp: {self.K_hyp:.1f} bits\n'
-            #F'NID: {self.normalized_information_distance:.2f}%\n'
+            '-------------------- NID -------------------\n'
+            F'K_r2h: {self.K_r2h:.1f} bits\n'
+            F'K_h2r: {self.K_h2r:.1f} bits\n'
+            F'K_ref: {self.K_ref:.1f} bits\n'
+            F'K_hyp: {self.K_hyp:.1f} bits\n'
+            F'NID: {self.normalized_information_distance:.2f}%\n'
             '-------------------- NIER -------------------\n'
-            F'K     : {self.K:.1f} bits\n'
-            F'K_ref : {self.K_ref:.1f} bits\n'
-            F'K_hyp : {self.K_hyp:.1f} bits\n'
+            F'I_err: {self.I_err:.1f} bits\n'
+            F'I_ref: {self.I_ref:.1f} bits\n'
+            F'I_hyp: {self.I_hyp:.1f} bits\n'
             F'NIER: {self.normalized_information_error_rate:.2f}%\n'
             '========================================================\n'
         )
@@ -268,8 +266,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--logk', type=int, default=500 , help='logging interval')
     parser.add_argument('-t', '--tokenizer', type=str, required=True, help='word / char / sentencepiece_model_path')
-    parser.add_argument('-m', '--metrics', nargs='+', choices=['TER', 'NIER'], default=['TER'], help='nargs: TER, NIER, ...')
-    parser.add_argument('--codec', type=str, help='Token codec in NID, e.g. spm:sentencepiece.model, count:wordcount.tsv, ...')
+    parser.add_argument('-m', '--metrics', nargs='+', choices=['TER', 'NID', 'NIER'], default=['TER'], help='nargs: TER, NID, NIER, ...')
+    parser.add_argument('--codec', type=str, help='Token codec in NIER, e.g. spm:sentencepiece.model, count:wordcount.tsv, ...')
     parser.add_argument('--ref', type=str, required=True, help='REF text')
     parser.add_argument('--hyp', type=str, required=True, help='HYP text')
     parser.add_argument('details', type=str)
@@ -314,7 +312,6 @@ if __name__ == '__main__':
                     INS = lambda T: 1,
                     DEL = lambda T: 1,
                 )
-
                 distance, ref_len, hyp_len, alignment = ED(tokenizer(refs[utt]), tokenizer(hyps[utt]))
 
                 c, s, i, d = CountEdits(alignment)
@@ -326,6 +323,26 @@ if __name__ == '__main__':
                 TER, mTER = ComputeTER(c, s, i, d)
 
                 print(F'{{"utt":{utt}, "TER":{TER:.2f}, "mTER":{mTER:.2f}, "LevED":{distance}, "cor":{c}, "sub":{s}, "ins":{i}, "del":{d}}}', file=fo)
+                print(*PrettyAlignment(alignment), sep='\n', file=fo)
+                print('-'* 35, file=fo)
+            
+            if 'NID' in args.metrics:
+                ED = lambda I, O: LevenshteinDistance(I, O,
+                    SUB = lambda T_i, T_o: 0 if T_i == T_o else (LevenshteinDistance(list(T_i), list(T_o))[0] / max(len(T_i), len(T_o))),
+                    INS = lambda T: 1,
+                    DEL = lambda T: 1,
+                )
+                K, K_ref, K_hyp, alignment = ED(tokenizer(refs[utt]), tokenizer(hyps[utt]))
+                K_r2h, K_h2r = K, K
+
+                stats.K_r2h += K_r2h
+                stats.K_h2r += K_h2r
+                stats.K_ref += K_ref
+                stats.K_hyp += K_hyp
+
+                NID = ComputeNID(K, K, K_ref, K_hyp)
+
+                print(F'{{"utt":{utt}, "NID":{NID:.2f}, "K_r2h":{K_r2h:.2f}, "K_h2r":{K_h2r:.2f}, "K_ref":{K_ref:.2f}, "K_hyp":{K_hyp:.2f}}}', file=fo)
                 print(*PrettyAlignment(alignment), sep='\n', file=fo)
                 print('-'* 35, file=fo)
 
@@ -341,29 +358,30 @@ if __name__ == '__main__':
                     INS = lambda T: 1.0 if not args.codec else codec.NumBits(T),
                     DEL = lambda T: 1.0 if not args.codec else codec.NumBits(T),
                 )
+                I_err, I_ref, I_hyp, alignment = ED(tokenizer(refs[utt]), tokenizer(hyps[utt]))
 
-                K, K_ref, K_hyp, alignment = ED(tokenizer(refs[utt]), tokenizer(hyps[utt]))
-                stats.K     += K
-                stats.K_ref += K_ref
-                stats.K_hyp += K_hyp
+                stats.I_err += I_err
+                stats.I_ref += I_ref
+                stats.I_hyp += I_hyp
 
-                NIER = ComputeNIER(K, K_ref, K_hyp)
+                NIER = ComputeNIER(I_err, I_ref, I_hyp)
 
-                # for debug purpose
-                _, _, _, alignment1 = ED(tokenizer(refs[utt]), [])
-                _, _, _, alignment2 = ED([], tokenizer(hyps[utt]))
+                print(F'{{"utt":{utt}, "NIER":{NIER:.2f}, "I_err":{I_err:.2f}, "I_ref":{I_ref:.2f}, "I_hyp":{I_hyp:.2f}}}', file=fo)
+                print(*PrettyAlignment(alignment), sep='\n', file=fo)
 
-                print(F'{{"utt":{utt}, "NIER":{NIER:.2f}, "K":{K:.2f}, "K(ref)":{K_ref:.2f}, "K(hyp)":{K_hyp:.2f}}}', file=fo)
-                print(
-                    *PrettyAlignment(alignment), '',
-                    *PrettyAlignment(alignment1), '',
-                    *PrettyAlignment(alignment2), 
-                    sep='\n', file=fo
-                )
+                ## for debug purpose
+                #_, _, _, alignment1 = ED(tokenizer(refs[utt]), [])
+                #_, _, _, alignment2 = ED([], tokenizer(hyps[utt]))
+                #print(
+                #    *PrettyAlignment(alignment),  '',
+                #    *PrettyAlignment(alignment1), '',
+                #    *PrettyAlignment(alignment2), 
+                #    sep='\n', file=fo
+                #)
 
             print('=' * 70, file=fo)
 
-            if locals().get('TER') or locals().get('NIER'):
+            if locals().get('TER') or locals().get('NID') or locals().get('NIER'):
                 stats.utts_with_error += 1
             stats.utts += 1
 
@@ -374,8 +392,10 @@ if __name__ == '__main__':
 
         if 'TER' in args.metrics:
             stats.token_error_rate, stats.modified_token_error_rate = ComputeTER(stats.C, stats.S, stats.I, stats.D)
+        if 'NID' in args.metrics:
+            stats.normalized_information_distance = ComputeNID(stats.K_r2h, stats.K_h2r, stats.K_ref, stats.K_hyp)
         if 'NIER' in args.metrics:
-            stats.normalized_information_error_rate = ComputeNIER(stats.K, stats.K_ref, stats.K_hyp)
+            stats.normalized_information_error_rate = ComputeNIER(stats.I_err, stats.I_ref, stats.I_hyp)
 
         print(stats.to_summary(), file=fo)
     logging.info(f'Total {stats.utts} utts evaluated.')
